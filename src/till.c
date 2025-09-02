@@ -290,6 +290,20 @@ static int cmd_install(int argc, char *argv[]) {
             strncpy(opts.mode, argv[++i], sizeof(opts.mode) - 1);
         } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             strncpy(opts.name, argv[++i], sizeof(opts.name) - 1);
+            
+            /* If name looks like Coder-X, set mode and path accordingly */
+            if (strncmp(opts.name, "Coder-", 6) == 0 && strlen(opts.name) == 7) {
+                char mode[32];
+                snprintf(mode, sizeof(mode), "coder-%c", tolower(opts.name[6]));
+                strncpy(opts.mode, mode, sizeof(opts.mode) - 1);
+                
+                /* Set path if not already specified */
+                if (strlen(opts.path) == 0) {
+                    snprintf(opts.path, sizeof(opts.path), "../%s", opts.name);
+                }
+                /* Clear name since Coder-X will auto-generate it */
+                opts.name[0] = '\0';
+            }
         } else if (strcmp(argv[i], "--path") == 0 && i + 1 < argc) {
             strncpy(opts.path, argv[++i], sizeof(opts.path) - 1);
         } else if (strcmp(argv[i], "--port-base") == 0 && i + 1 < argc) {
@@ -318,10 +332,10 @@ static int cmd_install(int argc, char *argv[]) {
             }
         }
         
-        /* Set default path */
+        /* Set default path - sibling to till */
         if (strlen(opts.path) == 0) {
-            char coder_dir[32];
-            snprintf(coder_dir, sizeof(coder_dir), "Coder-%c", 
+            char coder_dir[TILL_MAX_PATH];
+            snprintf(coder_dir, sizeof(coder_dir), "../Coder-%c", 
                      toupper(opts.mode[6]));
             strncpy(opts.path, coder_dir, sizeof(opts.path) - 1);
         }
@@ -342,9 +356,9 @@ static int cmd_install(int argc, char *argv[]) {
             return EXIT_USAGE_ERROR;
         }
         
-        /* Set default path if not specified */
+        /* Set default path if not specified - sibling to till */
         if (strlen(opts.path) == 0) {
-            strcpy(opts.path, "Tekton");
+            strcpy(opts.path, "../Tekton");
         }
     }
     

@@ -54,6 +54,58 @@ int ensure_directory(const char *path) {
     return 0;
 }
 
+/* Helper: Get primary Tekton path */
+static int get_primary_tekton_path(char *path, size_t size) {
+    char config_path[TILL_MAX_PATH];
+    FILE *fp;
+    cJSON *root = NULL;
+    
+    snprintf(config_path, sizeof(config_path), 
+             "%s/%s", TILL_FEDERATION_DIR, TILL_PRIVATE_CONFIG);
+    
+    fp = fopen(config_path, "r");
+    if (!fp) {
+        return -1;
+    }
+    
+    fseek(fp, 0, SEEK_END);
+    long fsize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    char *content = malloc(fsize + 1);
+    fread(content, 1, fsize, fp);
+    content[fsize] = '\0';
+    fclose(fp);
+    
+    root = cJSON_Parse(content);
+    free(content);
+    
+    if (!root) {
+        return -1;
+    }
+    
+    /* Look for primary Tekton */
+    cJSON *primary = cJSON_GetObjectItem(root, "primary_tekton");
+    if (primary && primary->valuestring) {
+        /* Get the path for this installation */
+        cJSON *installations = cJSON_GetObjectItem(root, "installations");
+        if (installations) {
+            cJSON *install = cJSON_GetObjectItem(installations, primary->valuestring);
+            if (install) {
+                cJSON *install_path = cJSON_GetObjectItem(install, "path");
+                if (install_path && install_path->valuestring) {
+                    strncpy(path, install_path->valuestring, size);
+                    cJSON_Delete(root);
+                    return 0;
+                }
+            }
+        }
+    }
+    
+    cJSON_Delete(root);
+    return -1;
+}
+
 /* Discover existing Tekton installations */
 int discover_tektons(void) {
     printf("Discovering existing Tekton installations...\n");
@@ -70,10 +122,16 @@ int discover_tektons(void) {
         "../Coder-A",
         "../Coder-B",
         "../Coder-C",
+        "../Coder-D",
+        "../Coder-E",
         "~/Tekton",
         "~/projects/Tekton",
         "~/projects/Coder-A",
         "~/projects/Coder-B",
+        "~/projects/github/Tekton",
+        "~/projects/github/Coder-A",
+        "~/projects/github/Coder-B",
+        "~/projects/github/Coder-C",
         NULL
     };
     
@@ -130,9 +188,37 @@ int discover_tektons(void) {
         }
         fclose(fp);
         
-        if (strlen(registry_name) > 0) {
+        /* If no registry name but we have port info, generate a name */
+        if (strlen(registry_name) == 0 && port_base >= 0) {
+            /* Determine name based on directory and port */
+            const char *dir_name = strrchr(expanded_path, '/');
+            if (dir_name) {
+                dir_name++; /* Skip the slash */
+                if (strcmp(dir_name, "Tekton") == 0) {
+                    if (port_base == 8000) {
+                        strcpy(registry_name, "primary.tekton.local");
+                    } else {
+                        snprintf(registry_name, sizeof(registry_name), "tekton.port%d.local", port_base);
+                    }
+                } else if (strncmp(dir_name, "Coder-", 6) == 0) {
+                    char letter = dir_name[6];
+                    snprintf(registry_name, sizeof(registry_name), "primary.tekton.local.coder-%c", tolower(letter));
+                } else {
+                    strcpy(registry_name, dir_name);
+                }
+            }
+        }
+        
+        if (strlen(registry_name) > 0 || port_base >= 0) {
             /* Get absolute path */
             if (get_absolute_path(expanded_path, abs_path, sizeof(abs_path)) != 0) {
+                continue;
+            }
+            
+            /* Check if we already have this installation (deduplication) */
+            cJSON *existing = cJSON_GetObjectItem(installations, registry_name);
+            if (existing) {
+                /* Already found this installation, skip duplicate */
                 continue;
             }
             
@@ -341,6 +427,18 @@ int generate_env_local(install_options_t *opts) {
     /* Write Tekton Root */
     fprintf(fp, "# Tekton Root (for this Tekton environment)\n");
     fprintf(fp, "TEKTON_ROOT=%s\n", abs_path);
+    fprintf(fp, "\n");
+    
+    /* Write Main Tekton Root */
+    fprintf(fp, "# Main Tekton Root (primary Tekton on this host)\n");
+    char main_root[TILL_MAX_PATH] = "";
+    get_primary_tekton_path(main_root, sizeof(main_root));
+    if (strlen(main_root) > 0) {
+        fprintf(fp, "TEKTON_MAIN_ROOT=%s\n", main_root);
+    } else {
+        /* If this is the first/primary installation, use this path */
+        fprintf(fp, "TEKTON_MAIN_ROOT=%s\n", abs_path);
+    }
     fprintf(fp, "\n");
     
     /* Write Registry Name */
