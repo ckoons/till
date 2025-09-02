@@ -1,0 +1,29 @@
+# Till gitignore
+
+# Build artifacts
+/build/
+/till
+*.o
+*.a
+*.so
+*.dylib
+
+# Local Till configuration (never upload)
+/.till/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.dSYM/
+core
+*.core
+
+# Temporary files
+*.tmp
+*.log
