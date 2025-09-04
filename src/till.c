@@ -92,6 +92,7 @@ static int file_exists(const char *path);
 static int dir_exists(const char *path);
 static int get_absolute_path(const char *relative, char *absolute, size_t size);
 static int create_directory(const char *path);
+static int get_till_parent_dir(char *parent_dir, size_t size);
 
 /* Main entry point */
 int main(int argc, char *argv[]) {
@@ -206,7 +207,8 @@ static void print_usage(const char *program) {
     printf("  -i, --interactive   Interactive mode for supported commands\n");
     printf("\nCommands:\n");
     printf("  (none)              Dry run - show what sync would do\n");
-    printf("  sync                Run synchronization now\n");
+    printf("  sync                Pull updates for all Tekton installations\n");
+    printf("  sync --dry-run      Check for updates without pulling\n");
     printf("  watch [hours]       Set watch daemon frequency (default: 24h)\n");
     printf("  install [options]   Install Tekton or components\n");
     printf("  uninstall <name>    Uninstall component\n");
@@ -302,19 +304,233 @@ static int dry_run(void) {
 
 /* Command: sync */
 static int cmd_sync(int argc, char *argv[]) {
-    (void)argc;  /* Suppress unused parameter warning */
-    (void)argv;
+    char config_path[TILL_MAX_PATH];
+    FILE *fp;
+    int total_updated = 0;
+    int total_failed = 0;
+    int total_skipped = 0;
+    int dry_run = 0;
     
-    printf("Running Till sync...\n");
+    /* Check for --dry-run option */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--dry-run") == 0 || strcmp(argv[i], "-n") == 0) {
+            dry_run = 1;
+            break;
+        }
+    }
     
-    /* TODO: Implement actual sync logic */
-    printf("1. Fetching menu-of-the-day from GitHub...\n");
-    printf("2. Checking component versions...\n");
-    printf("3. Updating components (respecting holds)...\n");
-    printf("4. Updating federation registry...\n");
+    if (dry_run) {
+        printf("Running Till sync (DRY RUN - no changes will be made)...\n");
+        till_log(LOG_INFO, "Starting sync operation (dry run)");
+    } else {
+        printf("Running Till sync...\n");
+        till_log(LOG_INFO, "Starting sync operation");
+    }
     
-    printf("\nSync complete.\n");
-    return EXIT_SUCCESS;
+    /* Read till-private.json to get all installations */
+    snprintf(config_path, sizeof(config_path), 
+             "%s/%s", TILL_TEKTON_DIR, TILL_PRIVATE_CONFIG);
+    
+    fp = fopen(config_path, "r");
+    if (!fp) {
+        fprintf(stderr, "Error: No installations found. Run 'till install' first.\n");
+        till_log(LOG_ERROR, "No installations found");
+        return EXIT_FILE_ERROR;
+    }
+    
+    /* Read entire file */
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    char *content = malloc(size + 1);
+    if (!content) {
+        fclose(fp);
+        return EXIT_GENERAL_ERROR;
+    }
+    
+    fread(content, 1, size, fp);
+    content[size] = '\0';
+    fclose(fp);
+    
+    /* Parse JSON */
+    cJSON *root = cJSON_Parse(content);
+    free(content);
+    
+    if (!root) {
+        fprintf(stderr, "Error: Failed to parse till-private.json\n");
+        till_log(LOG_ERROR, "Failed to parse till-private.json");
+        return EXIT_FILE_ERROR;
+    }
+    
+    /* Get installations object */
+    cJSON *installations = cJSON_GetObjectItem(root, "installations");
+    if (!installations || !cJSON_IsObject(installations)) {
+        fprintf(stderr, "No installations found in configuration\n");
+        cJSON_Delete(root);
+        return EXIT_SUCCESS;
+    }
+    
+    /* Count installations */
+    int install_count = cJSON_GetArraySize(installations);
+    if (install_count == 0) {
+        printf("No Tekton installations to sync.\n");
+        cJSON_Delete(root);
+        return EXIT_SUCCESS;
+    }
+    
+    printf("Found %d Tekton installation%s to sync\n\n", 
+           install_count, install_count == 1 ? "" : "s");
+    
+    /* Iterate through each installation */
+    cJSON *installation = NULL;
+    const char *registry_name = NULL;
+    
+    cJSON_ArrayForEach(installation, installations) {
+        registry_name = installation->string;
+        cJSON *root_item = cJSON_GetObjectItem(installation, "root");
+        
+        if (!root_item || !cJSON_IsString(root_item)) {
+            printf("⚠️  Skipping %s: no root path found\n", registry_name);
+            total_skipped++;
+            continue;
+        }
+        
+        const char *tekton_path = root_item->valuestring;
+        
+        /* Check if directory exists */
+        if (!dir_exists(tekton_path)) {
+            printf("⚠️  Skipping %s: directory not found (%s)\n", 
+                   registry_name, tekton_path);
+            till_log(LOG_WARNING, "Directory not found for %s: %s", 
+                    registry_name, tekton_path);
+            total_skipped++;
+            continue;
+        }
+        
+        /* Check if it's a git repository */
+        char git_dir[TILL_MAX_PATH];
+        snprintf(git_dir, sizeof(git_dir), "%s/.git", tekton_path);
+        if (!dir_exists(git_dir)) {
+            printf("⚠️  Skipping %s: not a git repository\n", registry_name);
+            till_log(LOG_WARNING, "%s is not a git repository", registry_name);
+            total_skipped++;
+            continue;
+        }
+        
+        /* Check for holds (future feature) */
+        cJSON *hold_item = cJSON_GetObjectItem(installation, "hold");
+        if (hold_item && cJSON_IsTrue(hold_item)) {
+            printf("🔒 Skipping %s: updates are on hold\n", registry_name);
+            till_log(LOG_INFO, "%s is on hold, skipping", registry_name);
+            total_skipped++;
+            continue;
+        }
+        
+        /* Perform git pull or check status */
+        printf("📦 %s %s...\n", dry_run ? "Checking" : "Updating", registry_name);
+        printf("   Path: %s\n", tekton_path);
+        
+        if (dry_run) {
+            /* In dry-run mode, just check git status */
+            char cmd[TILL_MAX_PATH * 2];
+            snprintf(cmd, sizeof(cmd), 
+                    "cd \"%s\" && git fetch --dry-run 2>&1", tekton_path);
+            
+            FILE *pipe = popen(cmd, "r");
+            if (pipe) {
+                char output[1024];
+                int has_updates = 0;
+                while (fgets(output, sizeof(output), pipe)) {
+                    if (strlen(output) > 1) {
+                        has_updates = 1;
+                        break;
+                    }
+                }
+                pclose(pipe);
+                
+                if (has_updates) {
+                    printf("   🔄 Updates available (would pull)\n");
+                    total_updated++;
+                } else {
+                    printf("   ✅ Already up to date\n");
+                }
+            } else {
+                printf("   ⚠️  Could not check status\n");
+                total_skipped++;
+            }
+        } else {
+            /* Actually perform git pull */
+            char cmd[TILL_MAX_PATH * 2];
+            snprintf(cmd, sizeof(cmd), 
+                    "cd \"%s\" && git pull --quiet 2>&1", tekton_path);
+            
+            FILE *pipe = popen(cmd, "r");
+            if (!pipe) {
+                printf("   ❌ Failed to run git pull\n");
+                till_log(LOG_ERROR, "Failed to run git pull for %s", registry_name);
+                total_failed++;
+                continue;
+            }
+            
+            /* Read git pull output */
+            char output[1024];
+            char full_output[4096] = "";
+            while (fgets(output, sizeof(output), pipe)) {
+                strncat(full_output, output, sizeof(full_output) - strlen(full_output) - 1);
+            }
+            
+            int status = pclose(pipe);
+            
+            if (status == 0) {
+                /* Check if there were actual updates */
+                if (strstr(full_output, "Already up to date") || 
+                    strstr(full_output, "Already up-to-date")) {
+                    printf("   ✅ Already up to date\n");
+                } else {
+                    printf("   ✅ Updated successfully\n");
+                    if (strlen(full_output) > 0 && !strstr(full_output, "Fast-forward")) {
+                        /* Show what was updated if not a simple fast-forward */
+                        printf("   %s", full_output);
+                    }
+                    total_updated++;
+                }
+                till_log(LOG_INFO, "Successfully synced %s", registry_name);
+            } else {
+                printf("   ❌ Git pull failed\n");
+                if (strlen(full_output) > 0) {
+                    printf("   Error: %s", full_output);
+                }
+                till_log(LOG_ERROR, "Git pull failed for %s: %s", 
+                        registry_name, full_output);
+                total_failed++;
+            }
+        }
+        
+        printf("\n");
+    }
+    
+    cJSON_Delete(root);
+    
+    /* Print summary */
+    printf("%s Summary:\n", dry_run ? "Dry Run" : "Sync");
+    if (dry_run) {
+        printf("  🔄 Would update: %d\n", total_updated);
+    } else {
+        printf("  ✅ Updated:      %d\n", total_updated);
+    }
+    printf("  ⚠️  Skipped:      %d\n", total_skipped);
+    if (total_failed > 0) {
+        printf("  ❌ Failed:       %d\n", total_failed);
+    }
+    
+    till_log(LOG_INFO, "%s complete: %d %s, %d skipped, %d failed", 
+            dry_run ? "Dry run" : "Sync",
+            total_updated, dry_run ? "would update" : "updated", 
+            total_skipped, total_failed);
+    
+    printf("\n%s complete.\n", dry_run ? "Dry run" : "Sync");
+    return (total_failed > 0) ? EXIT_GENERAL_ERROR : EXIT_SUCCESS;
 }
 
 /* Command: watch */
@@ -399,10 +615,17 @@ static int cmd_install(int argc, char *argv[]) {
         
         /* Set default path - sibling to till */
         if (strlen(opts.path) == 0) {
-            char coder_dir[TILL_MAX_PATH];
-            snprintf(coder_dir, sizeof(coder_dir), "../Coder-%c", 
-                     toupper(opts.mode[6]));
-            strncpy(opts.path, coder_dir, sizeof(opts.path) - 1);
+            char till_parent[TILL_MAX_PATH];
+            if (get_till_parent_dir(till_parent, sizeof(till_parent)) == 0) {
+                snprintf(opts.path, sizeof(opts.path), "%s/Coder-%c", 
+                         till_parent, toupper(opts.mode[6]));
+            } else {
+                /* Fallback to relative path */
+                char coder_dir[TILL_MAX_PATH];
+                snprintf(coder_dir, sizeof(coder_dir), "../Coder-%c", 
+                         toupper(opts.mode[6]));
+                strncpy(opts.path, coder_dir, sizeof(opts.path) - 1);
+            }
         }
     } else {
         /* Regular installation - require name for non-solo */
@@ -423,10 +646,16 @@ static int cmd_install(int argc, char *argv[]) {
         
         /* Set default path if not specified - sibling to till */
         if (strlen(opts.path) == 0) {
-            /* Path will be set in interactive mode based on name */
-            /* For non-interactive, use the name */
-            snprintf(opts.path, sizeof(opts.path), "../%s", 
-                     strlen(opts.name) > 0 ? opts.name : "Tekton");
+            /* Use till's parent directory as the base */
+            char till_parent[TILL_MAX_PATH];
+            if (get_till_parent_dir(till_parent, sizeof(till_parent)) == 0) {
+                snprintf(opts.path, sizeof(opts.path), "%s/%s", till_parent,
+                         strlen(opts.name) > 0 ? opts.name : "Tekton");
+            } else {
+                /* Fallback to relative path */
+                snprintf(opts.path, sizeof(opts.path), "../%s", 
+                         strlen(opts.name) > 0 ? opts.name : "Tekton");
+            }
         }
     }
     
@@ -512,19 +741,19 @@ static int cmd_install(int argc, char *argv[]) {
         
         /* Question 3: Path */
         char default_path[TILL_MAX_PATH];
-        /* Generate clean absolute path without "../" */
-        char current_dir[TILL_MAX_PATH];
-        if (getcwd(current_dir, sizeof(current_dir))) {
-            /* Get parent directory of current directory */
-            char *last_slash = strrchr(current_dir, '/');
-            if (last_slash) {
-                *last_slash = '\0';  /* Remove last component to get parent */
+        /* Use till's parent directory as the base for installations */
+        char till_parent[TILL_MAX_PATH];
+        if (get_till_parent_dir(till_parent, sizeof(till_parent)) == 0) {
+            /* Install as sibling to till */
+            snprintf(default_path, sizeof(default_path), "%s/%s", till_parent, opts.name);
+        } else {
+            /* Fallback: use current directory */
+            char current_dir[TILL_MAX_PATH];
+            if (getcwd(current_dir, sizeof(current_dir))) {
                 snprintf(default_path, sizeof(default_path), "%s/%s", current_dir, opts.name);
             } else {
-                snprintf(default_path, sizeof(default_path), "../%s", opts.name);
+                snprintf(default_path, sizeof(default_path), "./%s", opts.name);
             }
-        } else {
-            snprintf(default_path, sizeof(default_path), "../%s", opts.name);
         }
         strcpy(opts.path, default_path);
         
@@ -916,6 +1145,27 @@ static int file_exists(const char *path) {
 static int dir_exists(const char *path) {
     struct stat st;
     return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+}
+
+/* Get till's installation directory (parent of till's location) */
+static int get_till_parent_dir(char *parent_dir, size_t size) {
+    /* Use a known location for till */
+    char *home = getenv("HOME");
+    if (!home) {
+        return -1;
+    }
+    
+    /* Till is installed at ~/projects/github/till */
+    /* So parent directory is ~/projects/github */
+    snprintf(parent_dir, size, "%s/projects/github", home);
+    
+    /* Verify the directory exists */
+    struct stat st;
+    if (stat(parent_dir, &st) == 0 && S_ISDIR(st.st_mode)) {
+        return 0;
+    }
+    
+    return -1;
 }
 
 /* Get absolute path */
