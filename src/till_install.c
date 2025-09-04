@@ -713,10 +713,10 @@ int generate_env_local(install_options_t *opts) {
         fp = fopen(env_path, "a");
         if (fp) {
             fprintf(fp, "\n# Tekton Registry Name\n");
-            if (strcmp(opts->mode, MODE_SOLO) == 0) {
-                fprintf(fp, "TEKTON_REGISTRY_NAME=None\n");
+            if (strlen(opts->registry_name) > 0) {
+                fprintf(fp, "TEKTON_REGISTRY_NAME=%s\n", opts->registry_name);
             } else {
-                fprintf(fp, "TEKTON_REGISTRY_NAME=%s\n", opts->name);
+                fprintf(fp, "TEKTON_REGISTRY_NAME=None\n");
             }
             fclose(fp);
         }
@@ -747,10 +747,9 @@ int generate_env_local(install_options_t *opts) {
     fprintf(fp, "# Tekton Registry Name\n");
     if (strlen(opts->registry_name) > 0) {
         fprintf(fp, "TEKTON_REGISTRY_NAME=%s\n", opts->registry_name);
-    } else if (strcmp(opts->mode, MODE_SOLO) == 0) {
-        fprintf(fp, "TEKTON_REGISTRY_NAME=None\n");
     } else {
-        fprintf(fp, "TEKTON_REGISTRY_NAME=%s\n", opts->name);
+        /* Should not happen if interactive mode works correctly */
+        fprintf(fp, "TEKTON_REGISTRY_NAME=None\n");
     }
     fprintf(fp, "\n");
     
@@ -1181,11 +1180,13 @@ int register_installation(install_options_t *opts) {
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", localtime(&now));
     cJSON_AddStringToObject(install, "installed", timestamp);
     
-    cJSON_AddItemToObject(installations, opts->name, install);
+    /* Use registry name as key if available, otherwise use name */
+    const char *key = strlen(opts->registry_name) > 0 ? opts->registry_name : opts->name;
+    cJSON_AddItemToObject(installations, key, install);
     
     /* Mark as primary if it's the first installation */
     if (cJSON_GetArraySize(installations) == 1) {
-        cJSON_AddStringToObject(root, "primary_tekton", opts->name);
+        cJSON_AddStringToObject(root, "primary_tekton", key);
     }
     
     /* Write back to file */

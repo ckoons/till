@@ -472,8 +472,22 @@ static int cmd_install(int argc, char *argv[]) {
         }
         
         /* Question 2: Registry Name */
-        printf("2. Tekton Registry Name [%s]: ", 
-               strlen(opts.registry_name) > 0 ? opts.registry_name : opts.name);
+        char default_registry[TILL_MAX_NAME];
+        if (strlen(opts.registry_name) == 0) {
+            /* Generate default: lowercase(name).tekton.development.us */
+            char lower_name[TILL_MAX_NAME];
+            int i;
+            for (i = 0; opts.name[i] && i < TILL_MAX_NAME - 1; i++) {
+                lower_name[i] = tolower(opts.name[i]);
+            }
+            lower_name[i] = '\0';
+            snprintf(default_registry, sizeof(default_registry), 
+                     "%s.tekton.development.us", lower_name);
+        } else {
+            strcpy(default_registry, opts.registry_name);
+        }
+        
+        printf("2. Tekton Registry Name [%s]: ", default_registry);
         fflush(stdout);
         if (fgets(input, sizeof(input), stdin)) {
             if (input[0] == 27) {  /* ESC key */
@@ -483,9 +497,17 @@ static int cmd_install(int argc, char *argv[]) {
             if (input[0] != '\n') {
                 input[strcspn(input, "\n")] = 0;
                 strncpy(opts.registry_name, input, sizeof(opts.registry_name) - 1);
-            } else if (strlen(opts.registry_name) == 0) {
-                strcpy(opts.registry_name, opts.name);
+            } else {
+                strcpy(opts.registry_name, default_registry);
             }
+        }
+        
+        /* Check for reserved names */
+        if (strcmp(opts.registry_name, "primary.tekton.development.us") == 0 ||
+            strcmp(opts.registry_name, "tekton.tekton.development.us") == 0) {
+            printf("\nError: '%s' is a reserved registry name.\n", opts.registry_name);
+            printf("Please use a different name.\n");
+            return EXIT_USAGE_ERROR;
         }
         
         /* Question 3: Path */
