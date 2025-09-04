@@ -487,6 +487,27 @@ int till_install_tekton(install_options_t *opts) {
         return -1;
     }
     
+    /* Step 3.5: Create .till symlink in the Tekton directory */
+    char till_dir[TILL_MAX_PATH];
+    char symlink_path[TILL_MAX_PATH];
+    char *home = getenv("HOME");
+    if (home) {
+        /* Point to the actual till/.till directory */
+        snprintf(till_dir, sizeof(till_dir), "%s/projects/github/till/.till", home);
+        snprintf(symlink_path, sizeof(symlink_path), "%s/.till", opts->path);
+        
+        /* Remove existing symlink if it exists */
+        unlink(symlink_path);
+        
+        /* Create symlink from Tekton/.till -> ~/.till */
+        if (symlink(till_dir, symlink_path) == 0) {
+            printf("Created .till symlink in %s\n", opts->path);
+        } else {
+            fprintf(stderr, "Warning: Could not create .till symlink: %s\n", strerror(errno));
+            /* Not a fatal error - continue */
+        }
+    }
+    
     /* Step 4: If observer/member, register with federation */
     if (strcmp(opts->mode, MODE_OBSERVER) == 0 || 
         strcmp(opts->mode, MODE_MEMBER) == 0) {
