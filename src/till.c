@@ -423,14 +423,16 @@ static int cmd_install(int argc, char *argv[]) {
         
         /* Set default path if not specified - sibling to till */
         if (strlen(opts.path) == 0) {
-            strcpy(opts.path, "../Tekton");
+            /* Path will be set in interactive mode based on name */
+            /* For non-interactive, use the name */
+            snprintf(opts.path, sizeof(opts.path), "../%s", 
+                     strlen(opts.name) > 0 ? opts.name : "Tekton");
         }
     }
     
     /* Interactive mode - prompt for confirmation and adjustments */
     if (g_interactive) {
         char input[256];
-        char abs_path[TILL_MAX_PATH];
         
         /* Auto-suggest ports if not set */
         if (opts.port_base == DEFAULT_PORT_BASE && opts.ai_port_base == DEFAULT_AI_PORT_BASE) {
@@ -488,22 +490,21 @@ static int cmd_install(int argc, char *argv[]) {
         
         /* Question 3: Path */
         char default_path[TILL_MAX_PATH];
-        if (strlen(opts.path) == 0) {
-            /* Generate default path - just the directory name */
-            if (strncmp(opts.name, "Coder-", 6) == 0) {
-                snprintf(default_path, sizeof(default_path), "../%s", opts.name);
+        /* Generate clean absolute path without "../" */
+        char current_dir[TILL_MAX_PATH];
+        if (getcwd(current_dir, sizeof(current_dir))) {
+            /* Get parent directory of current directory */
+            char *last_slash = strrchr(current_dir, '/');
+            if (last_slash) {
+                *last_slash = '\0';  /* Remove last component to get parent */
+                snprintf(default_path, sizeof(default_path), "%s/%s", current_dir, opts.name);
             } else {
-                snprintf(default_path, sizeof(default_path), "../Tekton");
+                snprintf(default_path, sizeof(default_path), "../%s", opts.name);
             }
-            strcpy(opts.path, default_path);
         } else {
-            strcpy(default_path, opts.path);
+            snprintf(default_path, sizeof(default_path), "../%s", opts.name);
         }
-        
-        /* Resolve to absolute for display */
-        if (get_absolute_path(default_path, abs_path, sizeof(abs_path)) == 0) {
-            strcpy(default_path, abs_path);
-        }
+        strcpy(opts.path, default_path);
         
         printf("3. Installation Path [%s]: ", default_path);
         fflush(stdout);

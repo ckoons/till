@@ -31,12 +31,32 @@ static int get_absolute_path(const char *relative, char *absolute, size_t size) 
         return 0;
     }
     
+    /* Use realpath to properly resolve the path including .. components */
+    char resolved[TILL_MAX_PATH];
+    if (realpath(relative, resolved) != NULL) {
+        strncpy(absolute, resolved, size);
+        return 0;
+    }
+    
+    /* If realpath fails (e.g., path doesn't exist yet), construct it manually */
     char cwd[TILL_MAX_PATH];
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
         return -1;
     }
     
-    snprintf(absolute, size, "%s/%s", cwd, relative);
+    /* Simple path resolution for non-existent paths */
+    if (strncmp(relative, "../", 3) == 0) {
+        /* Go up one directory */
+        char *last_slash = strrchr(cwd, '/');
+        if (last_slash) {
+            *last_slash = '\0';
+            snprintf(absolute, size, "%s/%s", cwd, relative + 3);
+        } else {
+            snprintf(absolute, size, "%s/%s", cwd, relative);
+        }
+    } else {
+        snprintf(absolute, size, "%s/%s", cwd, relative);
+    }
     return 0;
 }
 
@@ -96,20 +116,28 @@ int get_primary_tekton_path(char *path, size_t size) {
         return -1;
     }
     
-    /* Look for primary Tekton */
-    cJSON *primary = cJSON_GetObjectItem(root, "primary_tekton");
-    if (primary && primary->valuestring) {
-        /* Get the path for this installation */
-        cJSON *installations = cJSON_GetObjectItem(root, "installations");
-        if (installations) {
-            cJSON *install = cJSON_GetObjectItem(installations, primary->valuestring);
-            if (install) {
-                cJSON *install_path = cJSON_GetObjectItem(install, "path");
-                if (install_path && install_path->valuestring) {
-                    strncpy(path, install_path->valuestring, size);
-                    cJSON_Delete(root);
-                    return 0;
-                }
+    /* Look for installations */
+    cJSON *installations = cJSON_GetObjectItem(root, "installations");
+    if (installations) {
+        /* First, try to find primary.tekton.development.us */
+        cJSON *primary = cJSON_GetObjectItem(installations, "primary.tekton.development.us");
+        if (primary) {
+            cJSON *main_root = cJSON_GetObjectItem(primary, "main_root");
+            if (main_root && main_root->valuestring) {
+                strncpy(path, main_root->valuestring, size);
+                cJSON_Delete(root);
+                return 0;
+            }
+        }
+        
+        /* Otherwise, use the first installation's main_root */
+        cJSON *first = installations->child;
+        if (first) {
+            cJSON *main_root = cJSON_GetObjectItem(first, "main_root");
+            if (main_root && main_root->valuestring) {
+                strncpy(path, main_root->valuestring, size);
+                cJSON_Delete(root);
+                return 0;
             }
         }
     }
