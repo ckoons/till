@@ -16,26 +16,21 @@
 #define TILL_GITHUB_BASE "https://github.com"
 #define TILL_GITHUB_USER "ckoons"  /* Will change to tekton org later */
 #define TILL_GITHUB_REPO "till"
-#define TILL_PUBLIC_REPO "till-public"
 
 /* Default URLs */
 #define TILL_REPO_URL TILL_GITHUB_BASE "/" TILL_GITHUB_USER "/" TILL_GITHUB_REPO
-#define TILL_PUBLIC_URL TILL_GITHUB_BASE "/" TILL_GITHUB_USER "/" TILL_PUBLIC_REPO
 #define TEKTON_REPO_URL TILL_GITHUB_BASE "/" TILL_GITHUB_USER "/Tekton"
 
 /* Local Paths */
 #define TILL_HOME ".till"
 #define TILL_CONFIG_DIR ".till/config"
 #define TILL_TEKTON_DIR ".till/tekton"
-#define TILL_FEDERATION_DIR ".till/tekton/federation"
-#define TILL_INSTALLED_DIR ".till/tekton/installed"
+#define TILL_LOGS_DIR ".till/logs"
 
 /* Configuration Files */
 #define TILL_PRIVATE_CONFIG "till-private.json"
-#define TILL_PUBLIC_CONFIG "till-public.json"
-#define TILL_REGISTRY_CONFIG "till-registry.json"
+#define TILL_PRIVATE_BACKUP "till-private.json.bak"
 #define TILL_HOSTS_CONFIG "till-hosts.json"
-#define TILL_MENU_CONFIG "till-menu.json"
 
 /* Federation Configuration */
 #define TILL_DEFAULT_MODE "solo"

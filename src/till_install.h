@@ -19,11 +19,11 @@ typedef struct {
 typedef struct {
     char name[TILL_MAX_NAME];          /* Registry name */
     char path[TILL_MAX_PATH];          /* Installation path */
-    char mode[32];                      /* solo/observer/member/coder-x */
+    char mode[32];                      /* solo/observer/member */
     int port_base;                      /* Base port (8000, 8100, etc) */
     int ai_port_base;                   /* AI base port (45000, 45100, etc) */
-    int is_coder;                       /* Is this a Coder-X installation? */
-    char coder_letter;                  /* A, B, C, etc. */
+    char registry_name[TILL_MAX_NAME]; /* TEKTON_REGISTRY_NAME */
+    char tekton_main_root[TILL_MAX_PATH]; /* TEKTON_MAIN_ROOT path */
 } install_options_t;
 
 /* Function prototypes */
@@ -60,10 +60,10 @@ static const component_port_t COMPONENT_PORTS[] = {
     {"SOPHIA_PORT", 14},
     {"NOESIS_PORT", 15},
     {"NUMA_PORT", 16},
-    {"AISH_PORT", 17},
-    {"AISH_MCP_PORT", 18},
     {"HEPHAESTUS_PORT", 80},  /* Special case */
     {"HEPHAESTUS_MCP_PORT", 88},  /* Special case */
+    {"AISH_PORT", 97},
+    {"AISH_MCP_PORT", 98},
     {"DB_MCP_PORT", 99},  /* At base + 99 */
     {NULL, -1}
 };
