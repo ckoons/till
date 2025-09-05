@@ -1,0 +1,431 @@
+/*
+ * till_run.c - Component command execution for Till
+ * 
+ * Discovers and executes commands from installed components
+ * via their .tillrc/commands/ directory.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <dirent.h>
+#include <errno.h>
+#include <pwd.h>
+#include <limits.h>
+
+#include "till_config.h"
+#include "till_run.h"
+#include "cJSON.h"
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+/* Component structure */
+typedef struct {
+    char name[256];
+    char root[PATH_MAX];
+    char registry_name[256];
+    int has_commands;
+} component_t;
+
+/* Get till configuration directory */
+static int get_till_config_dir(char *dir, size_t size) {
+    struct passwd *pw = getpwuid(getuid());
+    if (!pw) return -1;
+    
+    snprintf(dir, size, "%s/.till", pw->pw_dir);
+    return 0;
+}
+
+/* Load installed components from till-private.json */
+static cJSON *load_installations(void) {
+    char config_path[PATH_MAX];
+    if (get_till_config_dir(config_path, sizeof(config_path)) != 0) {
+        return NULL;
+    }
+    
+    strcat(config_path, "/tekton/till-private.json");
+    
+    FILE *fp = fopen(config_path, "r");
+    if (!fp) {
+        return NULL;
+    }
+    
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    char *content = malloc(size + 1);
+    if (!content) {
+        fclose(fp);
+        return NULL;
+    }
+    
+    fread(content, 1, size, fp);
+    content[size] = '\0';
+    fclose(fp);
+    
+    cJSON *json = cJSON_Parse(content);
+    free(content);
+    
+    return json;
+}
+
+/* Extract component name from registry name */
+static void extract_component_name(const char *registry_name, char *component) {
+    /* For Tekton installations, component is always "tekton" */
+    if (strstr(registry_name, "tekton")) {
+        strcpy(component, "tekton");
+        return;
+    }
+    
+    /* For other components, use first part of registry name */
+    const char *dot = strchr(registry_name, '.');
+    if (dot) {
+        size_t len = dot - registry_name;
+        strncpy(component, registry_name, len);
+        component[len] = '\0';
+    } else {
+        strcpy(component, registry_name);
+    }
+}
+
+/* Check if component has .tillrc/commands directory */
+static int has_command_directory(const char *root) {
+    char cmd_dir[PATH_MAX];
+    snprintf(cmd_dir, sizeof(cmd_dir), "%s/.tillrc/commands", root);
+    
+    struct stat st;
+    return (stat(cmd_dir, &st) == 0 && S_ISDIR(st.st_mode));
+}
+
+/* List available commands for a component */
+static int list_component_commands(const char *component, const char *root) {
+    char cmd_dir[PATH_MAX];
+    snprintf(cmd_dir, sizeof(cmd_dir), "%s/.tillrc/commands", root);
+    
+    DIR *dir = opendir(cmd_dir);
+    if (!dir) {
+        return 0;
+    }
+    
+    printf("  %s:\n", component);
+    
+    struct dirent *entry;
+    int count = 0;
+    while ((entry = readdir(dir))) {
+        if (entry->d_name[0] != '.') {
+            char cmd_path[PATH_MAX];
+            snprintf(cmd_path, sizeof(cmd_path), "%s/%s", cmd_dir, entry->d_name);
+            
+            struct stat st;
+            if (stat(cmd_path, &st) == 0 && (st.st_mode & S_IXUSR)) {
+                printf("    - %s\n", entry->d_name);
+                count++;
+            }
+        }
+    }
+    
+    closedir(dir);
+    
+    if (count == 0) {
+        printf("    (no executable commands found)\n");
+    }
+    
+    return count;
+}
+
+/* List all available components and their commands */
+static int list_all_components(void) {
+    cJSON *json = load_installations();
+    if (!json) {
+        fprintf(stderr, "No installations found. Run 'till install' first.\n");
+        return -1;
+    }
+    
+    cJSON *installations = cJSON_GetObjectItem(json, "installations");
+    if (!installations) {
+        fprintf(stderr, "No installations found in configuration.\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    printf("Available components and commands:\n\n");
+    
+    /* Track unique components */
+    component_t components[100];
+    int comp_count = 0;
+    
+    cJSON *installation;
+    cJSON_ArrayForEach(installation, installations) {
+        const char *registry_name = installation->string;
+        cJSON *root_item = cJSON_GetObjectItem(installation, "root");
+        
+        if (root_item && cJSON_IsString(root_item)) {
+            const char *root = root_item->valuestring;
+            
+            /* Extract component type */
+            char component[256];
+            extract_component_name(registry_name, component);
+            
+            /* Check if we've already listed this component type */
+            int found = 0;
+            for (int i = 0; i < comp_count; i++) {
+                if (strcmp(components[i].name, component) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+            
+            if (!found && has_command_directory(root)) {
+                strcpy(components[comp_count].name, component);
+                strcpy(components[comp_count].root, root);
+                strcpy(components[comp_count].registry_name, registry_name);
+                components[comp_count].has_commands = 1;
+                comp_count++;
+                
+                list_component_commands(component, root);
+                printf("\n");
+            }
+        }
+    }
+    
+    if (comp_count == 0) {
+        printf("No components with executable commands found.\n");
+        printf("Components must have a .tillrc/commands/ directory with executable scripts.\n");
+    } else {
+        printf("Usage: till run <component> <command> [arguments...]\n");
+        printf("Example: till run tekton start\n");
+    }
+    
+    cJSON_Delete(json);
+    return 0;
+}
+
+/* Find component root by name or registry name */
+static char *find_component_root(const char *component_name) {
+    static char root[PATH_MAX];
+    
+    cJSON *json = load_installations();
+    if (!json) {
+        return NULL;
+    }
+    
+    cJSON *installations = cJSON_GetObjectItem(json, "installations");
+    if (!installations) {
+        cJSON_Delete(json);
+        return NULL;
+    }
+    
+    /* First try exact registry name match */
+    cJSON *installation;
+    cJSON_ArrayForEach(installation, installations) {
+        const char *registry_name = installation->string;
+        if (strcmp(component_name, registry_name) == 0) {
+            cJSON *root_item = cJSON_GetObjectItem(installation, "root");
+            if (root_item && cJSON_IsString(root_item)) {
+                strcpy(root, root_item->valuestring);
+                cJSON_Delete(json);
+                return root;
+            }
+        }
+    }
+    
+    /* Then try component type match (e.g., "tekton" matches any tekton installation) */
+    /* For now, return the primary/first match */
+    cJSON_ArrayForEach(installation, installations) {
+        const char *registry_name = installation->string;
+        char comp_type[256];
+        extract_component_name(registry_name, comp_type);
+        
+        if (strcmp(component_name, comp_type) == 0) {
+            /* Prefer "primary" installation */
+            if (strstr(registry_name, "primary")) {
+                cJSON *root_item = cJSON_GetObjectItem(installation, "root");
+                if (root_item && cJSON_IsString(root_item)) {
+                    strcpy(root, root_item->valuestring);
+                    cJSON_Delete(json);
+                    return root;
+                }
+            }
+        }
+    }
+    
+    /* If no primary, return first match */
+    cJSON_ArrayForEach(installation, installations) {
+        const char *registry_name = installation->string;
+        char comp_type[256];
+        extract_component_name(registry_name, comp_type);
+        
+        if (strcmp(component_name, comp_type) == 0) {
+            cJSON *root_item = cJSON_GetObjectItem(installation, "root");
+            if (root_item && cJSON_IsString(root_item)) {
+                strcpy(root, root_item->valuestring);
+                cJSON_Delete(json);
+                return root;
+            }
+        }
+    }
+    
+    cJSON_Delete(json);
+    return NULL;
+}
+
+/* Execute a component command */
+static int execute_component_command(const char *component, const char *command, 
+                                    int argc, char *argv[]) {
+    /* Find component root */
+    char *root = find_component_root(component);
+    if (!root) {
+        fprintf(stderr, "Error: Component '%s' not found.\n", component);
+        fprintf(stderr, "Run 'till run' to see available components.\n");
+        return -1;
+    }
+    
+    /* Build path to command */
+    char cmd_path[PATH_MAX];
+    snprintf(cmd_path, sizeof(cmd_path), "%s/.tillrc/commands/%s", root, command);
+    
+    /* Check if command exists and is executable */
+    struct stat st;
+    if (stat(cmd_path, &st) != 0) {
+        if (errno == ENOENT) {
+            fprintf(stderr, "Error: Command '%s' not found for component '%s'.\n", 
+                    command, component);
+            
+            /* List available commands */
+            char cmd_dir[PATH_MAX];
+            snprintf(cmd_dir, sizeof(cmd_dir), "%s/.tillrc/commands", root);
+            
+            DIR *dir = opendir(cmd_dir);
+            if (dir) {
+                printf("\nAvailable commands for %s:\n", component);
+                struct dirent *entry;
+                while ((entry = readdir(dir))) {
+                    if (entry->d_name[0] != '.') {
+                        char check_path[PATH_MAX];
+                        snprintf(check_path, sizeof(check_path), "%s/%s", 
+                                cmd_dir, entry->d_name);
+                        if (stat(check_path, &st) == 0 && (st.st_mode & S_IXUSR)) {
+                            printf("  - %s\n", entry->d_name);
+                        }
+                    }
+                }
+                closedir(dir);
+            } else {
+                fprintf(stderr, "\nComponent '%s' has no .tillrc/commands directory.\n", 
+                        component);
+            }
+        } else {
+            fprintf(stderr, "Error: Cannot access command: %s\n", strerror(errno));
+        }
+        return -1;
+    }
+    
+    if (!(st.st_mode & S_IXUSR)) {
+        fprintf(stderr, "Error: Command '%s' is not executable.\n", command);
+        fprintf(stderr, "Fix with: chmod +x %s\n", cmd_path);
+        return -1;
+    }
+    
+    /* Build arguments array for execv */
+    char **exec_args = malloc((argc + 2) * sizeof(char *));
+    if (!exec_args) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        return -1;
+    }
+    
+    exec_args[0] = cmd_path;
+    for (int i = 0; i < argc; i++) {
+        exec_args[i + 1] = argv[i];
+    }
+    exec_args[argc + 1] = NULL;
+    
+    /* Change to component root directory before executing */
+    char original_dir[PATH_MAX];
+    if (getcwd(original_dir, sizeof(original_dir)) == NULL) {
+        free(exec_args);
+        return -1;
+    }
+    
+    if (chdir(root) != 0) {
+        fprintf(stderr, "Error: Cannot change to component directory: %s\n", 
+                strerror(errno));
+        free(exec_args);
+        return -1;
+    }
+    
+    /* Execute the command */
+    pid_t pid = fork();
+    if (pid == -1) {
+        fprintf(stderr, "Error: Fork failed: %s\n", strerror(errno));
+        chdir(original_dir);
+        free(exec_args);
+        return -1;
+    }
+    
+    if (pid == 0) {
+        /* Child process */
+        execv(cmd_path, exec_args);
+        /* If we get here, exec failed */
+        fprintf(stderr, "Error: Failed to execute command: %s\n", strerror(errno));
+        exit(127);
+    }
+    
+    /* Parent process - wait for child */
+    int status;
+    waitpid(pid, &status, 0);
+    
+    /* Restore original directory */
+    chdir(original_dir);
+    free(exec_args);
+    
+    /* Return child's exit status */
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    
+    return -1;
+}
+
+/* Main entry point for till run command */
+int till_run_command(int argc, char *argv[]) {
+    if (argc < 1) {
+        /* No arguments - list all components and commands */
+        return list_all_components();
+    }
+    
+    if (argc < 2) {
+        /* Only component specified - list its commands */
+        char *root = find_component_root(argv[0]);
+        if (!root) {
+            fprintf(stderr, "Error: Component '%s' not found.\n", argv[0]);
+            return list_all_components();
+        }
+        
+        printf("Available commands for %s:\n", argv[0]);
+        if (list_component_commands(argv[0], root) == 0) {
+            printf("Component '%s' has no executable commands.\n", argv[0]);
+        }
+        printf("\nUsage: till run %s <command> [arguments...]\n", argv[0]);
+        return 0;
+    }
+    
+    /* Component and command specified - execute */
+    const char *component = argv[0];
+    const char *command = argv[1];
+    
+    return execute_component_command(component, command, argc - 2, argv + 2);
+}
+
+/* Check if Till can run a component */
+int till_can_run_component(const char *component) {
+    char *root = find_component_root(component);
+    if (!root) return 0;
+    
+    return has_command_directory(root);
+}

@@ -20,6 +20,7 @@
 #include "till_install.h"
 #include "till_host.h"
 #include "till_schedule.h"
+#include "till_run.h"
 #include "cJSON.h"
 
 /* Global flags */
@@ -52,7 +53,8 @@ typedef enum {
     CMD_RELEASE,
     CMD_HOST,
     CMD_FEDERATE,
-    CMD_STATUS
+    CMD_STATUS,
+    CMD_RUN
 } command_t;
 
 typedef enum {
@@ -85,6 +87,7 @@ static int cmd_release(int argc, char *argv[]);
 static int cmd_host(int argc, char *argv[]);
 static int cmd_federate(int argc, char *argv[]);
 static int cmd_status(int argc, char *argv[]);
+static int cmd_run(int argc, char *argv[]);
 static int dry_run(void);
 static int ensure_directories(void);
 static int ensure_discovery(void);
@@ -189,6 +192,9 @@ int main(int argc, char *argv[]) {
         case CMD_STATUS:
             result = cmd_status(argc - 1, argv + 1);
             break;
+        case CMD_RUN:
+            result = cmd_run(argc - 2, argv + 2);
+            break;
         case CMD_HELP:
             result = cmd_help(argc - 1, argv + 1);
             break;
@@ -222,6 +228,7 @@ static void print_usage(const char *program) {
     printf("  uninstall <name>    Uninstall component\n");
     printf("  hold <component>    Prevent component updates\n");
     printf("  release <component> Allow component updates\n");
+    printf("  run <component> <cmd> [args]  Run component command\n");
     printf("  host init           Initialize SSH environment\n");
     printf("  host add <name> <user>@<host>  Add remote host\n");
     printf("  host test <name>    Test host connectivity\n");
@@ -260,6 +267,7 @@ static command_t parse_command(const char *cmd) {
     if (strcmp(cmd, "host") == 0) return CMD_HOST;
     if (strcmp(cmd, "federate") == 0) return CMD_FEDERATE;
     if (strcmp(cmd, "status") == 0) return CMD_STATUS;
+    if (strcmp(cmd, "run") == 0) return CMD_RUN;
     if (strcmp(cmd, "help") == 0) return CMD_HELP;
     return CMD_NONE;
 }
@@ -1018,6 +1026,12 @@ static int cmd_status(int argc, char *argv[]) {
     printf("Hosts: [To be implemented]\n");
     
     return EXIT_SUCCESS;
+}
+
+/* Command: run */
+static int cmd_run(int argc, char *argv[]) {
+    /* Delegate to till_run module */
+    return till_run_command(argc, argv);
 }
 
 /* Command: help */

@@ -67,11 +67,27 @@ Run './till --help' for usage information
 # Shows command usage
 ```
 
-### Step 4: (Optional) System-wide Installation
+### Step 4: Installation Options
+
+#### Option A: System-wide Installation (requires sudo)
 
 ```bash
 sudo make install
 # Installs to /usr/local/bin/till
+
+# Now use from anywhere:
+till --version
+```
+
+#### Option B: User-local Installation (no sudo required)
+
+```bash
+make install-user
+# Installs to ~/.local/bin/till
+
+# Add to your PATH if not already present:
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
 
 # Now use from anywhere:
 till --version

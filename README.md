@@ -22,7 +22,14 @@
   git clone https://github.com/tekton/till
   cd till
   make
+  
+  # Install globally (requires sudo)
   sudo make install
+  
+  # OR install locally (no sudo required)
+  make install-user
+  # Then add ~/.local/bin to your PATH
+  ```
 
   That's it. No package managers, no virtual environments, no containers
   required.

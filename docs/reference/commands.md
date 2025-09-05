@@ -278,6 +278,34 @@ till host status laptop # Show specific host
 
 ## Component Management Commands
 
+### till run
+
+Execute component-specific commands.
+
+```bash
+till run [component] [command] [args...]
+```
+
+| Argument | Description |
+|----------|-----------|
+| `component` | Component name (e.g., tekton, numa, rhetor) |
+| `command` | Command to execute (e.g., start, stop, status) |
+| `args` | Additional arguments passed to the command |
+
+Without arguments, lists available components with discoverable commands.
+
+Till discovers commands in component `.tillrc/commands/` directories. Each executable file in this directory becomes an available command.
+
+Examples:
+```bash
+till run                        # List available components
+till run tekton                 # List commands for tekton
+till run tekton status          # Run tekton status command
+till run tekton start           # Start tekton
+till run tekton stop --force    # Stop tekton with --force flag
+till run numa build            # Run numa build command
+```
+
 ### till hold
 
 Prevent a component from being updated.

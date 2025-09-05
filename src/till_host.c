@@ -229,7 +229,12 @@ static int add_ssh_config_entry(const char *name, const char *user, const char *
         return -1;
     }
     
-    fprintf(fp, "\n# Host: %s (added %s)\n", name, ctime(&(time_t){time(NULL)}));
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    char time_str[64];
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+    
+    fprintf(fp, "\n# Host: %s (added %s)\n", name, time_str);
     fprintf(fp, "Host till-%s\n", name);
     fprintf(fp, "    HostName %s\n", host);
     fprintf(fp, "    User %s\n", user);
@@ -329,7 +334,14 @@ int till_host_add(const char *name, const char *user_at_host) {
     
     printf("Added host '%s' (%s@%s:%d)\n", name, user, host, port);
     printf("SSH alias: till-%s\n", name);
-    printf("Test with: till host test %s\n", name);
+    
+    /* Offer to copy SSH key */
+    printf("\nTo enable passwordless access, copy your Till SSH key:\n");
+    printf("  ssh-copy-id -i ~/.till/ssh/till_federation_ed25519.pub %s@%s\n", user, host);
+    if (port != 22) {
+        printf("  (Note: Add -p %d for non-standard port)\n", port);
+    }
+    printf("\nThen test with: till host test %s\n", name);
     
     cJSON_Delete(json);
     return 0;
@@ -452,10 +464,12 @@ int till_host_setup(const char *name) {
         return -1;
     }
     
-    /* Clone Till repository */
+    /* Clone Till repository - try SSH first, fall back to HTTPS */
     snprintf(cmd, sizeof(cmd),
         "ssh -F %s/.till/ssh/config till-%s "
-        "'cd ~/projects/github && [ -d till ] || git clone https://github.com/tillfed/till.git'",
+        "'cd ~/projects/github && [ -d till ] || "
+        "(git clone git@github.com:ckoons/till.git 2>/dev/null || "
+        "git clone https://github.com/ckoons/till.git)'",
         pw->pw_dir, name);
     
     printf("Cloning Till repository...\n");
@@ -679,6 +693,192 @@ int till_host_sync(const char *name) {
     return 0;
 }
 
+/* Remove a host */
+int till_host_remove(const char *name, int clean_remote) {
+    if (!name) {
+        fprintf(stderr, "Usage: till host remove <name> [--clean-remote]\n");
+        return -1;
+    }
+    
+    struct passwd *pw = getpwuid(getuid());
+    if (!pw) return -1;
+    
+    /* Load existing hosts */
+    cJSON *json = load_hosts();
+    if (!json) {
+        fprintf(stderr, "Error: No hosts configured\n");
+        return -1;
+    }
+    
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    if (!hosts) {
+        fprintf(stderr, "Error: No hosts configured\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    /* Check if host exists */
+    cJSON *host = cJSON_GetObjectItem(hosts, name);
+    if (!host) {
+        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    /* Get the hostname before we delete the host entry */
+    char *saved_hostname = NULL;
+    cJSON *host_field = cJSON_GetObjectItem(host, "host");
+    if (host_field && host_field->valuestring) {
+        saved_hostname = strdup(host_field->valuestring);
+    }
+    
+    /* If requested, clean up remote Till installation */
+    if (clean_remote) {
+        printf("Cleaning up remote Till installation on '%s'...\n", name);
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd),
+            "ssh -F %s/.till/ssh/config till-%s 'rm -rf ~/projects/github/till ~/.till'",
+            pw->pw_dir, name);
+        
+        if (system(cmd) != 0) {
+            fprintf(stderr, "Warning: Failed to clean remote installation\n");
+            /* Continue with local cleanup */
+        }
+    }
+    
+    /* 1. Remove from hosts JSON */
+    printf("Removing host '%s' from configuration...\n", name);
+    cJSON_DeleteItemFromObject(hosts, name);
+    
+    /* Save updated hosts file */
+    if (save_hosts(json) != 0) {
+        fprintf(stderr, "Error: Failed to update hosts file\n");
+        if (saved_hostname) free(saved_hostname);
+        cJSON_Delete(json);
+        return -1;
+    }
+    cJSON_Delete(json);
+    
+    /* 2. Remove SSH config entry */
+    printf("Removing SSH configuration for '%s'...\n", name);
+    char ssh_config[PATH_MAX];
+    char ssh_config_tmp[PATH_MAX];
+    snprintf(ssh_config, sizeof(ssh_config), "%s/.till/ssh/config", pw->pw_dir);
+    snprintf(ssh_config_tmp, sizeof(ssh_config_tmp), "%s.tmp", ssh_config);
+    
+    FILE *fp_in = fopen(ssh_config, "r");
+    FILE *fp_out = fopen(ssh_config_tmp, "w");
+    
+    if (fp_in && fp_out) {
+        char line[1024];
+        char prev_line[1024] = "";
+        int skip_block = 0;
+        int skip_next_blank = 0;
+        char host_pattern[256];
+        snprintf(host_pattern, sizeof(host_pattern), "Host till-%s", name);
+        
+        while (fgets(line, sizeof(line), fp_in)) {
+            /* Check if this is the start of the host block to remove */
+            if (strstr(line, host_pattern) != NULL) {
+                skip_block = 1;
+                skip_next_blank = 1;
+                /* Don't write the previous line if it's a comment for this host */
+                if (strstr(prev_line, name) != NULL && prev_line[0] == '#') {
+                    /* Clear prev_line so it won't be written */
+                    prev_line[0] = '\0';
+                }
+                continue;
+            }
+            
+            /* End of a host block */
+            if (skip_block) {
+                if (line[0] == '\n' || strncmp(line, "Host ", 5) == 0 || 
+                    strncmp(line, "#", 1) == 0) {
+                    skip_block = 0;
+                    if (line[0] == '\n' && skip_next_blank) {
+                        skip_next_blank = 0;
+                        continue; /* Skip the blank line after the block */
+                    }
+                } else {
+                    continue; /* Skip lines in the block */
+                }
+            }
+            
+            /* Write the previous line if it exists */
+            if (prev_line[0] != '\0') {
+                fputs(prev_line, fp_out);
+            }
+            
+            /* Save current line as previous for next iteration */
+            strcpy(prev_line, line);
+        }
+        
+        /* Write the last line if it wasn't part of a removed block */
+        if (prev_line[0] != '\0' && !skip_block) {
+            fputs(prev_line, fp_out);
+        }
+        
+        fclose(fp_in);
+        fclose(fp_out);
+        
+        /* Replace original with temp */
+        if (rename(ssh_config_tmp, ssh_config) != 0) {
+            fprintf(stderr, "Error: Failed to update SSH config\n");
+            unlink(ssh_config_tmp);
+            return -1;
+        }
+    } else {
+        if (fp_in) fclose(fp_in);
+        if (fp_out) fclose(fp_out);
+        fprintf(stderr, "Warning: Could not update SSH config\n");
+    }
+    
+    /* 3. Clean up SSH control socket if it exists */
+    printf("Cleaning up SSH control sockets...\n");
+    char control_path[PATH_MAX];
+    snprintf(control_path, sizeof(control_path), 
+        "%s/.till/ssh/control/till-%s-*", pw->pw_dir, name);
+    
+    char cmd[PATH_MAX + 10];
+    snprintf(cmd, sizeof(cmd), "rm -f %s 2>/dev/null", control_path);
+    system(cmd);
+    
+    /* 4. Remove from known_hosts */
+    printf("Cleaning up known_hosts entry...\n");
+    char known_hosts[PATH_MAX];
+    char known_hosts_tmp[PATH_MAX];
+    snprintf(known_hosts, sizeof(known_hosts), "%s/.till/ssh/known_hosts", pw->pw_dir);
+    snprintf(known_hosts_tmp, sizeof(known_hosts_tmp), "%s.tmp", known_hosts);
+    
+    if (saved_hostname) {
+        fp_in = fopen(known_hosts, "r");
+        fp_out = fopen(known_hosts_tmp, "w");
+        
+        if (fp_in && fp_out) {
+            char line[4096];
+            while (fgets(line, sizeof(line), fp_in)) {
+                /* Skip lines containing the hostname */
+                if (strstr(line, saved_hostname) == NULL) {
+                    fputs(line, fp_out);
+                }
+            }
+            
+            fclose(fp_in);
+            fclose(fp_out);
+            
+            rename(known_hosts_tmp, known_hosts);
+        } else {
+            if (fp_in) fclose(fp_in);
+            if (fp_out) fclose(fp_out);
+        }
+        
+        free(saved_hostname);
+    }
+    
+    printf("✓ Host '%s' removed successfully\n", name);
+    return 0;
+}
+
 /* Show host status */
 int till_host_status(const char *name) {
     cJSON *json = load_hosts();
@@ -785,6 +985,17 @@ int till_host_command(int argc, char *argv[]) {
     else if (strcmp(subcmd, "status") == 0) {
         return till_host_status(argc > 2 ? argv[2] : NULL);
     }
+    else if (strcmp(subcmd, "remove") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: till host remove <name> [--clean-remote]\n");
+            return -1;
+        }
+        int clean_remote = 0;
+        if (argc > 3 && strcmp(argv[3], "--clean-remote") == 0) {
+            clean_remote = 1;
+        }
+        return till_host_remove(argv[2], clean_remote);
+    }
     else {
         fprintf(stderr, "Unknown host subcommand: %s\n", subcmd);
         fprintf(stderr, "Available commands:\n");
@@ -795,6 +1006,7 @@ int till_host_command(int argc, char *argv[]) {
         fprintf(stderr, "  deploy  - Deploy Tekton to remote host\n");
         fprintf(stderr, "  sync    - Sync updates from remote host\n");
         fprintf(stderr, "  status  - Show host status\n");
+        fprintf(stderr, "  remove  - Remove a host from Till configuration\n");
         return -1;
     }
 }
