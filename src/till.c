@@ -9,6 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
 #include <time.h>
 #include <errno.h>
 #include <ctype.h>
@@ -93,6 +95,10 @@ static int dir_exists(const char *path);
 static int get_absolute_path(const char *relative, char *absolute, size_t size);
 static int create_directory(const char *path);
 static int get_till_parent_dir(char *parent_dir, size_t size);
+static int check_till_updates(int quiet_mode);
+static int self_update_till(void);
+static void rollback_till(const char *backup, const char *target);
+static int get_till_directory(char *till_dir, size_t size);
 
 /* Main entry point */
 int main(int argc, char *argv[]) {
@@ -299,6 +305,10 @@ static int dry_run(void) {
     }
     
     printf("\nTo execute these actions, run: till sync\n");
+    
+    /* Check for till updates */
+    check_till_updates(0);  /* verbose mode */
+    
     return EXIT_SUCCESS;
 }
 
@@ -316,6 +326,21 @@ static int cmd_sync(int argc, char *argv[]) {
         if (strcmp(argv[i], "--dry-run") == 0 || strcmp(argv[i], "-n") == 0) {
             dry_run = 1;
             break;
+        }
+    }
+    
+    /* First, check and update till itself if needed (not in dry-run mode) */
+    if (!dry_run) {
+        int updates = check_till_updates(1);  /* quiet mode */
+        if (updates > 0) {
+            printf("Updating till first (%d update%s available)...\n", 
+                   updates, updates == 1 ? "" : "s");
+            if (self_update_till() == 0) {
+                /* Will re-exec, so we never get here */
+                return EXIT_SUCCESS;
+            }
+            /* If update failed, continue with sync anyway */
+            printf("Till update failed, continuing with sync...\n\n");
         }
     }
     
@@ -1147,6 +1172,25 @@ static int dir_exists(const char *path) {
     return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
 }
 
+/* Get till's installation directory */
+static int get_till_directory(char *till_dir, size_t size) {
+    char *home = getenv("HOME");
+    if (!home) {
+        return -1;
+    }
+    
+    /* Till is installed at ~/projects/github/till */
+    snprintf(till_dir, size, "%s/projects/github/till", home);
+    
+    /* Verify the directory exists */
+    struct stat st;
+    if (stat(till_dir, &st) == 0 && S_ISDIR(st.st_mode)) {
+        return 0;
+    }
+    
+    return -1;
+}
+
 /* Get till's installation directory (parent of till's location) */
 static int get_till_parent_dir(char *parent_dir, size_t size) {
     /* Use a known location for till */
@@ -1168,6 +1212,46 @@ static int get_till_parent_dir(char *parent_dir, size_t size) {
     return -1;
 }
 
+/* Check for till updates */
+static int check_till_updates(int quiet_mode) {
+    char till_dir[TILL_MAX_PATH];
+    char cmd[TILL_MAX_PATH * 2];
+    
+    if (get_till_directory(till_dir, sizeof(till_dir)) != 0) {
+        return -1;
+    }
+    
+    /* Fetch latest without pulling */
+    snprintf(cmd, sizeof(cmd), 
+        "cd \"%s\" && git fetch --quiet origin main 2>/dev/null", till_dir);
+    
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe) return -1;
+    pclose(pipe);
+    
+    /* Check if we're behind */
+    snprintf(cmd, sizeof(cmd),
+        "cd \"%s\" && git rev-list HEAD..origin/main --count 2>/dev/null", till_dir);
+    
+    pipe = popen(cmd, "r");
+    if (!pipe) return -1;
+    
+    char output[32];
+    if (fgets(output, sizeof(output), pipe)) {
+        int behind = atoi(output);
+        if (behind > 0 && !quiet_mode) {
+            printf("\n📦 Till update available: %d commit%s behind\n", 
+                   behind, behind == 1 ? "" : "s");
+            printf("   Run 'till sync' to update till and all Tektons\n\n");
+        }
+        pclose(pipe);
+        return behind;
+    }
+    
+    pclose(pipe);
+    return 0;
+}
+
 /* Get absolute path */
 static int get_absolute_path(const char *relative, char *absolute, size_t size) {
     if (relative[0] == '/') {
@@ -1183,6 +1267,199 @@ static int get_absolute_path(const char *relative, char *absolute, size_t size) 
     
     snprintf(absolute, size, "%s/%s", cwd, relative);
     return 0;
+}
+
+/* Rollback till to backup version */
+static void rollback_till(const char *backup, const char *target) {
+    printf("   Rolling back to previous version...\n");
+    rename(backup, target);
+}
+
+/* Self-update till with backup and rollback */
+static int self_update_till(void) {
+    char till_dir[TILL_MAX_PATH];
+    char backup_path[TILL_MAX_PATH];
+    char lock_file[TILL_MAX_PATH];
+    char cmd[TILL_MAX_PATH * 2];
+    int lock_fd;
+    
+    if (get_till_directory(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Could not determine till directory\n");
+        return -1;
+    }
+    
+    /* 1. LOCK - Prevent concurrent updates */
+    snprintf(lock_file, sizeof(lock_file), "%s/.till-update.lock", till_dir);
+    lock_fd = open(lock_file, O_CREAT | O_EXCL | O_WRONLY, 0644);
+    if (lock_fd < 0) {
+        if (errno == EEXIST) {
+            printf("⚠️  Another till update in progress\n");
+            return -1;
+        }
+        return -1;
+    }
+    
+    /* 2. BACKUP - Save current executable */
+    char current_exe[TILL_MAX_PATH];
+    snprintf(current_exe, sizeof(current_exe), "%s/till", till_dir);
+    snprintf(backup_path, sizeof(backup_path), "%s/till.backup-%ld", 
+             till_dir, (long)time(NULL));
+    
+    printf("📦 Updating till...\n");
+    printf("   Backing up to: %s\n", backup_path);
+    
+    if (rename(current_exe, backup_path) != 0) {
+        printf("   ❌ Backup failed: %s\n", strerror(errno));
+        close(lock_fd);
+        unlink(lock_file);
+        return -1;
+    }
+    
+    /* 3. CHECK - Ensure clean working directory */
+    snprintf(cmd, sizeof(cmd), 
+        "cd \"%s\" && git status --porcelain 2>/dev/null", till_dir);
+    
+    FILE *pipe = popen(cmd, "r");
+    char changes[256];
+    int has_changes = 0;
+    if (pipe) {
+        if (fgets(changes, sizeof(changes), pipe)) {
+            if (strlen(changes) > 0) {
+                has_changes = 1;
+            }
+        }
+        pclose(pipe);
+    }
+    
+    if (has_changes) {
+        printf("   ⚠️  Uncommitted changes detected\n");
+        printf("   Stashing changes...\n");
+        
+        /* Stash changes */
+        snprintf(cmd, sizeof(cmd),
+            "cd \"%s\" && git stash push -m 'till-auto-update-%ld' 2>&1",
+            till_dir, (long)time(NULL));
+        system(cmd);
+    }
+    
+    /* 4. UPDATE - Pull latest */
+    printf("   Pulling latest changes...\n");
+    snprintf(cmd, sizeof(cmd),
+        "cd \"%s\" && git pull --no-edit origin main 2>&1", till_dir);
+    
+    pipe = popen(cmd, "r");
+    if (!pipe) {
+        rollback_till(backup_path, current_exe);
+        close(lock_fd);
+        unlink(lock_file);
+        return -1;
+    }
+    
+    char output[1024];
+    int success = 1;
+    while (fgets(output, sizeof(output), pipe)) {
+        /* Show important output */
+        if (strstr(output, "Fast-forward") || 
+            strstr(output, "files changed") ||
+            strstr(output, "insertions") ||
+            strstr(output, "deletions")) {
+            printf("   %s", output);
+        }
+        if (strstr(output, "error:") || strstr(output, "fatal:")) {
+            printf("   %s", output);
+            success = 0;
+        }
+    }
+    int status = pclose(pipe);
+    
+    if (status != 0 || !success) {
+        printf("   ❌ Git pull failed, rolling back\n");
+        rollback_till(backup_path, current_exe);
+        close(lock_fd);
+        unlink(lock_file);
+        return -1;
+    }
+    
+    /* 5. BUILD - Compile new version */
+    printf("   Building new version...\n");
+    snprintf(cmd, sizeof(cmd), "cd \"%s\" && make clean >/dev/null 2>&1 && make 2>&1", till_dir);
+    
+    pipe = popen(cmd, "r");
+    success = 1;
+    while (fgets(output, sizeof(output), pipe)) {
+        if (strstr(output, "error:") || strstr(output, "Error")) {
+            printf("   %s", output);
+            success = 0;
+        } else if (strstr(output, "Build complete")) {
+            printf("   %s", output);
+        }
+    }
+    status = pclose(pipe);
+    
+    if (status != 0 || !success) {
+        printf("   ❌ Build failed, rolling back\n");
+        rollback_till(backup_path, current_exe);
+        
+        /* Also revert git */
+        snprintf(cmd, sizeof(cmd), "cd \"%s\" && git reset --hard HEAD~1", till_dir);
+        system(cmd);
+        
+        close(lock_fd);
+        unlink(lock_file);
+        return -1;
+    }
+    
+    /* 6. VERIFY - Test new executable */
+    printf("   Verifying new version...\n");
+    snprintf(cmd, sizeof(cmd), "\"%s\" --version 2>&1", current_exe);
+    pipe = popen(cmd, "r");
+    if (!pipe) {
+        printf("   ❌ Verification failed, rolling back\n");
+        rollback_till(backup_path, current_exe);
+        close(lock_fd);
+        unlink(lock_file);
+        return -1;
+    }
+    
+    /* Read version output */
+    if (fgets(output, sizeof(output), pipe)) {
+        printf("   New version: %s", output);
+    }
+    status = pclose(pipe);
+    
+    if (status != 0) {
+        printf("   ❌ Verification failed, rolling back\n");
+        rollback_till(backup_path, current_exe);
+        close(lock_fd);
+        unlink(lock_file);
+        return -1;
+    }
+    
+    /* 7. CLEANUP - Remove backup after success */
+    printf("   ✅ Till updated successfully\n");
+    unlink(backup_path);
+    
+    /* Show what changed */
+    snprintf(cmd, sizeof(cmd), 
+        "cd \"%s\" && git log --oneline -5", till_dir);
+    printf("\n   Recent changes:\n");
+    pipe = popen(cmd, "r");
+    while (fgets(output, sizeof(output), pipe)) {
+        printf("     %s", output);
+    }
+    pclose(pipe);
+    
+    /* 8. UNLOCK */
+    close(lock_fd);
+    unlink(lock_file);
+    
+    /* 9. RE-EXEC - Run new version for the sync */
+    printf("\n   Restarting with new version...\n\n");
+    execl(current_exe, "till", "sync", NULL);
+    
+    /* If execl fails, return error */
+    fprintf(stderr, "Error: Failed to restart with new version\n");
+    return -1;
 }
 
 /* Run shell command - currently unused but may be needed for TODO implementations */
