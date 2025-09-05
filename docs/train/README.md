@@ -75,12 +75,30 @@ till install tekton --mode coder-b
 
 ### Managing Hosts
 
-Add remote Tekton instances:
+Initialize SSH environment and add remote hosts:
 ```bash
-till host add laptop localhost /Users/alice/Tekton
-till host add desktop 192.168.1.100 /home/alice/Tekton
-till host list
+# First time setup
+till host init
+
+# Add remote hosts
+till host add laptop alice@192.168.1.101
+till host add desktop alice@192.168.1.100
+till host add server deploy@server.example.com
+
+# Test connectivity
+till host test laptop
+
+# Setup Till on remote
+till host setup laptop
+
+# Deploy Tekton
+till host deploy laptop
+
+# Check status
+till host status
 ```
+
+See [Host Management Guide](host-management-guide.md) for detailed instructions.
 
 ### Component Management
 
@@ -190,8 +208,11 @@ Error: No primary Tekton found. Install primary first.
 
 ### Core Commands
 - `till` - Dry run, show what would happen
-- `till sync` - Synchronize with GitHub
-- `till watch [hours]` - Set automatic sync frequency
+- `till sync` - Synchronize all Tekton installations
+- `till sync --dry-run` - Preview sync without changes
+- `till watch [hours]` - Set automatic sync frequency  
+- `till watch --daily-at 03:00` - Sync daily at specific time
+- `till watch --status` - Show sync schedule
 - `till status` - Show Till status
 
 ### Installation
@@ -214,17 +235,23 @@ Error: No primary Tekton found. Install primary first.
 - `till federate leave` - Leave federation
 
 ### Hosts
-- `till host add <name> <address> <path>` - Add host
-- `till host remove <name>` - Remove host
-- `till host list` - List hosts
+- `till host init` - Initialize SSH environment
+- `till host add <name> <user>@<host>` - Add remote host
+- `till host test <name>` - Test connectivity
+- `till host setup <name>` - Install Till on remote
+- `till host deploy <name> [installation]` - Deploy Tekton
+- `till host sync [name]` - Sync from remote(s)
+- `till host status [name]` - Show host status
 
 ## Best Practices
 
 1. **Install Primary First**: Always install a primary Tekton before Coder environments
 2. **Use Meaningful Names**: Follow name.category.geography pattern
 3. **Document Custom Ports**: If not using defaults, document why
-4. **Regular Syncs**: Run `till sync` periodically for updates
+4. **Regular Syncs**: Set up daily sync with `till watch --daily-at 03:00`
 5. **Backup Configuration**: Keep copies of `.till/` directory
+6. **Secure SSH Keys**: Protect federation keys with proper permissions
+7. **Test Before Deploy**: Always `till host test` before deploying
 
 ## Getting Help
 
@@ -235,8 +262,19 @@ Error: No primary Tekton found. Install primary first.
 
 ## Next Steps
 
-1. Install your first Tekton
+1. Install your first Tekton locally
 2. Start Tekton with `cd Tekton && tekton start`
-3. Explore federation by joining as an observer
-4. Add Coder environments for development
-5. Customize your installation as needed
+3. Set up host management with `till host init`
+4. Add remote hosts for distributed development
+5. Configure automatic daily sync
+6. Explore federation by joining as an observer
+7. Add Coder environments for development
+8. Deploy to production hosts
+
+## See Also
+
+- [Host Management Guide](host-management-guide.md) - Detailed host setup
+- [Installation Guide](installation-guide.md) - Step-by-step installation
+- [Federation Guide](federation-guide.md) - Federation concepts
+- [Command Reference](../reference/commands.md) - Complete command list
+- [Configuration Reference](../reference/configuration.md) - All config files

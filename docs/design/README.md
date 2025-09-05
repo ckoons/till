@@ -18,8 +18,10 @@ Till is a lightweight C program that serves as the lifecycle manager for Tekton 
 till (executable)
 ├── Configuration Layer (till_config.h)
 ├── Installation Module (till_install.c)
+├── Host Management Module (till_host.c)
 ├── Federation Module (till_federate.c) [TODO]
-├── Sync Module (till_sync.c) [TODO]
+├── Sync Module (integrated in till.c)
+├── Schedule Management (schedule.json)
 └── JSON Management (cJSON library)
 ```
 
@@ -47,9 +49,23 @@ The installation module handles:
 
 See [Port Allocation](port-allocation.md) for detailed documentation.
 
-### 4. Federation System
+### 4. Host Management System
 
-The federation system enables:
+The host management system provides:
+- SSH-based remote control
+- Automated deployment and setup
+- Distributed synchronization
+- Secure federation key management
+
+See [Host Management](host-management.md) for detailed documentation.
+
+### 5. Federation System
+
+The federation system operates at two layers:
+- **Infrastructure Layer**: SSH-based host management (local control)
+- **Application Layer**: GitHub-based federation (tribal membership)
+
+Key features:
 - Solo installations (invisible)
 - Observer mode (read-only visibility)
 - Member mode (bidirectional trust)
@@ -64,14 +80,22 @@ See [Federation Design](federation.md) for details.
 │   ├── till.c             # Main program
 │   ├── till_config.h      # All configuration
 │   ├── till_install.c/h   # Installation module
+│   ├── till_host.c/h      # Host management module
 │   └── cJSON.c/h          # JSON library
 ├── .till/                 # Local configuration (not in Git)
-│   └── tekton/
-│       ├── federation/    # Federation configs
-│       └── installed/     # Component tracking
+│   ├── tekton/
+│   │   ├── federation/    # Federation configs
+│   │   └── installed/     # Component tracking
+│   ├── ssh/              # SSH configuration
+│   │   ├── config        # SSH client config
+│   │   └── control/      # SSH multiplexing
+│   ├── hosts-local.json  # Host database
+│   ├── schedule.json     # Sync scheduling
+│   └── logs/             # Operation logs
 ├── docs/                  # Documentation
 │   ├── design/           # Architecture and design
-│   └── train/            # User training
+│   ├── train/            # User training
+│   └── reference/        # Command & config reference
 └── Makefile              # Cross-platform build
 ```
 
@@ -112,11 +136,16 @@ Before committing changes:
 
 ## Future Enhancements
 
+- [x] Host management system (SSH-based)
+- [x] Remote deployment and synchronization
 - [ ] Federation branch management
 - [ ] Component version tracking
-- [ ] Watch daemon implementation
+- [x] Watch daemon implementation (basic)
+- [ ] Watch daemon with platform schedulers
 - [ ] MCP server for Till operations
 - [ ] Automated testing suite
+- [ ] Host groups and batch operations
+- [ ] Deployment rollback capability
 
 ## Important Notes
 

@@ -2,9 +2,85 @@
 
 ## Overview
 
-Federation enables multiple Tekton instances to discover, communicate, and share resources. Each Tekton maintains sovereignty while participating in a trust-based network.
+Federation in Till operates at two distinct layers:
 
-## Federation Modes
+1. **Infrastructure Layer (Local/Host Federation)**: Direct SSH-based management of hosts and deployments
+2. **Application Layer (GitHub Federation)**: Discovery and collaboration between Tekton applications
+
+Each layer serves different purposes while working together to create a complete federation ecosystem.
+
+## Two-Layer Federation Architecture
+
+### Infrastructure Layer (Local/Host)
+
+The infrastructure layer provides direct control over physical and virtual machines:
+
+**Characteristics**:
+- SSH-based communication
+- Full control if you have SSH access
+- No GitHub dependency
+- Managed entirely by Till
+- Host-to-host relationships
+
+**Use Cases**:
+- Managing your own machines (laptop, desktop, servers)
+- Team development environments
+- Private cloud deployments
+- CI/CD infrastructure
+
+**Management**:
+```bash
+# Add and control hosts directly
+till host add server user@server.com
+till host deploy server
+till host sync server
+```
+
+### Application Layer (GitHub)
+
+The application layer enables Tekton applications to federate and collaborate:
+
+**Characteristics**:
+- GitHub-based registration
+- Tribal membership model
+- Component and solution sharing
+- Public discovery
+- Application-to-application relationships
+
+**Use Cases**:
+- Open source collaboration
+- Component marketplace
+- Public Tekton registry
+- Cross-organization partnerships
+
+**Management**:
+```bash
+# Join GitHub federation
+till federate init --mode member --name alice.dev.us
+```
+
+### Layer Interaction
+
+While independent, the layers complement each other:
+
+1. **Infrastructure provides foundation**: Hosts run Tekton applications
+2. **Applications provide functionality**: Federated apps run on managed hosts
+3. **Till bridges both layers**: Single tool manages both infrastructure and applications
+
+Example workflow:
+```bash
+# Infrastructure: Setup hosts
+till host add prod deploy@prod.server.com
+till host setup prod
+
+# Deploy application
+till host deploy prod primary.tekton.us
+
+# Application: Join federation
+ssh till-prod 'cd ~/Tekton && till federate init --mode member --name prod.company.us'
+```
+
+## Federation Modes (Application Layer)
 
 ### Solo
 - **Visibility**: Invisible to other Tektons
@@ -176,8 +252,37 @@ till federate leave
 
 ## Design Principles
 
+### Overall Principles
 1. **No Central Authority**: True peer-to-peer federation
 2. **Working Code Wins**: Implementations define standards
 3. **Natural Growth**: Communities form organically
 4. **Privacy First**: Share only what you choose
 5. **Simple Protocol**: Branch names carry information
+
+### Infrastructure Layer Principles
+1. **Direct Control**: SSH provides immediate access
+2. **No Intermediaries**: Host-to-host communication
+3. **Full Sovereignty**: Complete control over your hosts
+4. **Local First**: Operates without internet if needed
+5. **Simple Tools**: Only SSH and rsync required
+
+### Application Layer Principles
+1. **Tribal Membership**: Applications choose their tribes
+2. **GitHub as Commons**: Shared neutral ground
+3. **Voluntary Participation**: Join and leave freely
+4. **Reputation Matters**: Build trust through actions
+5. **Component Sharing**: Collaborate through code
+
+## Comparison: Local vs GitHub Federation
+
+| Aspect | Infrastructure Layer | Application Layer |
+|--------|---------------------|-------------------|
+| **Communication** | SSH | GitHub API/Git |
+| **Authentication** | SSH Keys | GitHub Account |
+| **Discovery** | Manual (till host add) | Automatic (GitHub) |
+| **Scope** | Your hosts only | Global |
+| **Dependencies** | None (SSH only) | GitHub |
+| **Use Case** | Infrastructure management | Application collaboration |
+| **Control** | Full (if SSH access) | Shared (tribal) |
+| **Privacy** | Complete | Public or private repo |
+| **Relationships** | Host-to-host | App-to-app |

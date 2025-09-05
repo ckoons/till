@@ -18,6 +18,8 @@
 
 #include "till_config.h"
 #include "till_install.h"
+#include "till_host.h"
+#include "till_schedule.h"
 #include "cJSON.h"
 
 /* Global flags */
@@ -220,9 +222,13 @@ static void print_usage(const char *program) {
     printf("  uninstall <name>    Uninstall component\n");
     printf("  hold <component>    Prevent component updates\n");
     printf("  release <component> Allow component updates\n");
-    printf("  host add <name> <address> <path>  Add host\n");
-    printf("  host remove <name>  Remove host\n");
-    printf("  host list           List configured hosts\n");
+    printf("  host init           Initialize SSH environment\n");
+    printf("  host add <name> <user>@<host>  Add remote host\n");
+    printf("  host test <name>    Test host connectivity\n");
+    printf("  host setup <name>   Install Till on remote host\n");
+    printf("  host deploy <name>  Deploy Tekton to remote host\n");
+    printf("  host sync [name]    Sync from remote host(s)\n");
+    printf("  host status [name]  Show host status\n");
     printf("  federate init       Initialize federation\n");
     printf("  federate leave      Leave federation\n");
     printf("  federate status     Show federation status\n");
@@ -560,19 +566,8 @@ static int cmd_sync(int argc, char *argv[]) {
 
 /* Command: watch */
 static int cmd_watch(int argc, char *argv[]) {
-    int hours = TILL_DEFAULT_WATCH_HOURS;
-    
-    if (argc > 1) {
-        hours = atoi(argv[1]);
-        if (hours <= 0) {
-            fprintf(stderr, "Error: Invalid watch frequency\n");
-            return EXIT_USAGE_ERROR;
-        }
-    }
-    
-    printf("Setting watch frequency to %d hours\n", hours);
-    /* TODO: Implement watch daemon */
-    return EXIT_SUCCESS;
+    /* Delegate to schedule module */
+    return till_watch_configure(argc - 1, argv + 1);
 }
 
 /* Command: install */
@@ -957,94 +952,11 @@ static int cmd_release(int argc, char *argv[]) {
 
 /* Command: host */
 static int cmd_host(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Error: Subcommand required (add, remove, list)\n");
-        return EXIT_USAGE_ERROR;
-    }
+    /* Initialize Till SSH environment on first use */
+    till_host_init();
     
-    subcommand_t subcmd = parse_subcommand(argv[1]);
-    
-    switch (subcmd) {
-        case SUBCMD_ADD: {
-            char name[64], address[256], path[TILL_MAX_PATH];
-            
-            if (g_interactive && argc < 5) {
-                /* Interactive mode - prompt for host details */
-                char input[256];
-                printf("\n=== Interactive Host Configuration ===\n\n");
-                
-                /* Get name */
-                printf("Host name: ");
-                fflush(stdout);
-                if (!fgets(input, sizeof(input), stdin)) {
-                    return EXIT_USAGE_ERROR;
-                }
-                input[strcspn(input, "\n")] = 0;
-                strncpy(name, input, sizeof(name) - 1);
-                
-                /* Get address */
-                printf("Host address (IP or hostname): ");
-                fflush(stdout);
-                if (!fgets(input, sizeof(input), stdin)) {
-                    return EXIT_USAGE_ERROR;
-                }
-                input[strcspn(input, "\n")] = 0;
-                strncpy(address, input, sizeof(address) - 1);
-                
-                /* Get path */
-                printf("Tekton path on remote host: ");
-                fflush(stdout);
-                if (!fgets(input, sizeof(input), stdin)) {
-                    return EXIT_USAGE_ERROR;
-                }
-                input[strcspn(input, "\n")] = 0;
-                strncpy(path, input, sizeof(path) - 1);
-                
-                /* Confirm */
-                printf("\nAdd host '%s' at %s:%s? [Y/n]: ", name, address, path);
-                fflush(stdout);
-                if (fgets(input, sizeof(input), stdin)) {
-                    if (input[0] == 'n' || input[0] == 'N') {
-                        printf("Host addition cancelled.\n");
-                        return EXIT_SUCCESS;
-                    }
-                }
-            } else if (argc >= 5) {
-                /* Command line arguments provided */
-                strncpy(name, argv[2], sizeof(name) - 1);
-                strncpy(address, argv[3], sizeof(address) - 1);
-                strncpy(path, argv[4], sizeof(path) - 1);
-            } else {
-                fprintf(stderr, "Error: Usage: till host add <name> <address> <path>\n");
-                fprintf(stderr, "       or use --interactive mode\n");
-                return EXIT_USAGE_ERROR;
-            }
-            
-            printf("Adding host %s at %s with path %s\n", name, address, path);
-            /* TODO: Implement actual host add */
-            break;
-        }
-            
-        case SUBCMD_REMOVE:
-            if (argc < 3) {
-                fprintf(stderr, "Error: Host name required\n");
-                return EXIT_USAGE_ERROR;
-            }
-            printf("Removing host %s\n", argv[2]);
-            /* TODO: Implement host remove */
-            break;
-            
-        case SUBCMD_LIST:
-            printf("Configured hosts:\n");
-            /* TODO: Implement host list */
-            break;
-            
-        default:
-            fprintf(stderr, "Error: Unknown subcommand '%s'\n", argv[1]);
-            return EXIT_USAGE_ERROR;
-    }
-    
-    return EXIT_SUCCESS;
+    /* Delegate to host management module */
+    return till_host_command(argc, argv);
 }
 
 /* Command: federate */
