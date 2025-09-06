@@ -233,9 +233,11 @@ static void print_usage(const char *program) {
     printf("  host add <name> <user>@<host>  Add remote host\n");
     printf("  host test <name>    Test host connectivity\n");
     printf("  host setup <name>   Install Till on remote host\n");
-    printf("  host deploy <name>  Deploy Tekton to remote host\n");
+    printf("  host exec <name> <cmd>  Execute command on remote host\n");
+    printf("  host ssh <name> [cmd]   Open SSH session to remote host\n");
     printf("  host sync [name]    Sync from remote host(s)\n");
     printf("  host status [name]  Show host status\n");
+    printf("  host remove <name>  Remove host from configuration\n");
     printf("  federate init       Initialize federation\n");
     printf("  federate leave      Leave federation\n");
     printf("  federate status     Show federation status\n");
@@ -246,7 +248,14 @@ static void print_usage(const char *program) {
     printf("  till install              # Install Tekton\n");
     printf("  till install --mode solo  # Solo installation\n");
     printf("  till federate init --mode observer --name kant.philosophy.us\n");
-    printf("  till host add laptop localhost /Users/casey/Tekton\n");
+    printf("  till host add laptop casey@192.168.1.100\n");
+    printf("\nFor detailed help on a command, use:\n");
+    printf("  till help <command>     # Show help for specific command\n");
+    printf("  till <command> --help   # Alternative help syntax\n\n");
+    printf("Examples:\n");
+    printf("  till help host          # Show host command help\n");
+    printf("  till host --help        # Same as above\n");
+    printf("  till help run           # Show run command help\n");
 }
 
 /* Print version information */
@@ -1036,8 +1045,52 @@ static int cmd_run(int argc, char *argv[]) {
 
 /* Command: help */
 static int cmd_help(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+    /* Check if help is requested for a specific command */
+    if (argc > 1) {
+        const char *topic = argv[1];
+        
+        if (strcmp(topic, "host") == 0) {
+            /* Delegate to host help */
+            char *help_args[] = {"host", "--help"};
+            return till_host_command(2, help_args);
+        }
+        else if (strcmp(topic, "run") == 0) {
+            /* Delegate to run help */
+            char *help_args[] = {"--help"};
+            return till_run_command(1, help_args);
+        }
+        else if (strcmp(topic, "sync") == 0) {
+            printf("Till Sync - Synchronize Tekton Installations\n\n");
+            printf("Usage: till sync [options]\n\n");
+            printf("Options:\n");
+            printf("  --dry-run, -n    Show what would be synced without making changes\n");
+            printf("  --force          Force sync even if no updates detected\n");
+            printf("  --parallel       Sync all installations in parallel\n\n");
+            printf("Examples:\n");
+            printf("  till sync              # Sync all installations\n");
+            printf("  till sync --dry-run    # Preview sync operation\n");
+            printf("  till sync --force      # Force sync even if up-to-date\n");
+            return 0;
+        }
+        else if (strcmp(topic, "install") == 0) {
+            printf("Till Install - Install Tekton\n\n");
+            printf("Usage: till install [options]\n\n");
+            printf("Options:\n");
+            printf("  --mode MODE      Installation mode: solo, observer, member, coder-[a-c]\n");
+            printf("  --name NAME      Federation name (FQN format)\n");
+            printf("  --path PATH      Installation directory\n");
+            printf("  --port-base PORT Starting port for components\n\n");
+            printf("Examples:\n");
+            printf("  till install                        # Interactive installation\n");
+            printf("  till install --mode solo            # Solo mode\n");
+            printf("  till install --mode coder-a         # Development environment\n");
+            return 0;
+        }
+        else {
+            printf("No help available for '%s'\n\n", topic);
+        }
+    }
+    
     print_usage("till");
     return EXIT_SUCCESS;
 }

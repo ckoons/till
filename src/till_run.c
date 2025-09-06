@@ -392,8 +392,42 @@ static int execute_component_command(const char *component, const char *command,
     return -1;
 }
 
+/* Print run command help */
+static void print_run_help(void) {
+    printf("Till Run - Execute Component Commands\n\n");
+    printf("Usage: till run [component] [command] [arguments]\n\n");
+    printf("Description:\n");
+    printf("  Execute commands defined in component .tillrc/commands/ directories.\n");
+    printf("  Each executable file in a component's .tillrc/commands/ directory\n");
+    printf("  becomes an available command.\n\n");
+    printf("Usage patterns:\n");
+    printf("  till run                         List all components with commands\n");
+    printf("  till run <component>             List commands for a component\n");
+    printf("  till run <component> <command>   Execute a component command\n\n");
+    printf("Examples:\n");
+    printf("  till run                         # Show all available components\n");
+    printf("  till run tekton                  # List tekton commands\n");
+    printf("  till run tekton status           # Run tekton status command\n");
+    printf("  till run tekton start            # Start tekton\n");
+    printf("  till run tekton stop --force     # Stop tekton with arguments\n\n");
+    printf("Creating commands:\n");
+    printf("  1. Create .tillrc/commands/ directory in component root\n");
+    printf("  2. Add executable scripts (chmod +x)\n");
+    printf("  3. Scripts receive arguments and run in component directory\n\n");
+    printf("Note: Commands are discovered from all Tekton installations\n");
+    printf("      managed by Till.\n");
+}
+
 /* Main entry point for till run command */
 int till_run_command(int argc, char *argv[]) {
+    /* Check for help flag */
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            print_run_help();
+            return 0;
+        }
+    }
+    
     if (argc < 1) {
         /* No arguments - list all components and commands */
         return list_all_components();

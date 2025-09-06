@@ -29,11 +29,11 @@ BIN_DIR = .
 TARGET = $(BIN_DIR)/till
 
 # Source files
-SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/cJSON.c
-HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/cJSON.h
+SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/cJSON.c
+HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/cJSON.h
 
 # Object files
-OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/cJSON.o
+OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/cJSON.o
 
 # Default target
 all: $(TARGET)
@@ -69,6 +69,10 @@ $(BUILD_DIR)/till_schedule.o: $(SRC_DIR)/till_schedule.c $(HEADERS)
 $(BUILD_DIR)/till_run.o: $(SRC_DIR)/till_run.c $(HEADERS)
 	@echo "Compiling till_run.c..."
 	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_run.c -o $(BUILD_DIR)/till_run.o
+
+$(BUILD_DIR)/till_common.o: $(SRC_DIR)/till_common.c $(HEADERS)
+	@echo "Compiling till_common.c..."
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_common.c -o $(BUILD_DIR)/till_common.o
 
 $(BUILD_DIR)/cJSON.o: $(SRC_DIR)/cJSON.c $(SRC_DIR)/cJSON.h
 	@echo "Compiling cJSON.c..."

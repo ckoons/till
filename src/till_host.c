@@ -18,6 +18,7 @@
 
 #include "till_config.h"
 #include "till_host.h"
+#include "till_common.h"
 #include "cJSON.h"
 
 /* PATH_MAX fallback for systems that don't define it */
@@ -256,6 +257,8 @@ int till_host_add(const char *name, const char *user_at_host) {
         return -1;
     }
     
+    printf("Adding host '%s'...\n", name);
+    
     /* Parse user@host:port */
     char *at = strchr(user_at_host, '@');
     if (!at) {
@@ -332,16 +335,32 @@ int till_host_add(const char *name, const char *user_at_host) {
         return -1;
     }
     
-    printf("Added host '%s' (%s@%s:%d)\n", name, user, host, port);
-    printf("SSH alias: till-%s\n", name);
+    printf("✓ Host '%s' added (%s@%s:%d)\n", name, user, host, port);
+    printf("  SSH alias: till-%s\n", name);
     
-    /* Offer to copy SSH key */
-    printf("\nTo enable passwordless access, copy your Till SSH key:\n");
-    printf("  ssh-copy-id -i ~/.till/ssh/till_federation_ed25519.pub %s@%s\n", user, host);
-    if (port != 22) {
-        printf("  (Note: Add -p %d for non-standard port)\n", port);
+    /* Test basic SSH connectivity */
+    printf("\nTesting SSH connection...\n");
+    char test_cmd[1024];
+    struct passwd *pw = getpwuid(getuid());
+    snprintf(test_cmd, sizeof(test_cmd),
+        "ssh -o ConnectTimeout=5 -o PasswordAuthentication=no "
+        "-i %s/.till/ssh/till_federation_ed25519 %s@%s -p %d 'echo OK' 2>/dev/null",
+        pw->pw_dir, user, host, port);
+    
+    if (system(test_cmd) == 0) {
+        printf("✓ SSH key already configured\n");
+        printf("\nReady to use. Next steps:\n");
+        printf("  1. Setup Till: till host setup %s\n", name);
+        printf("  2. Deploy Tekton: till host deploy %s\n", name);
+    } else {
+        printf("✗ SSH key not configured\n");
+        printf("\nTo enable passwordless access, copy your Till SSH key:\n");
+        printf("  ssh-copy-id -i ~/.till/ssh/till_federation_ed25519.pub %s@%s", user, host);
+        if (port != 22) {
+            printf(" -p %d", port);
+        }
+        printf("\n\nThen test with: till host test %s\n", name);
     }
-    printf("\nThen test with: till host test %s\n", name);
     
     cJSON_Delete(json);
     return 0;
@@ -450,59 +469,66 @@ int till_host_setup(const char *name) {
         return -1;
     }
     
-    char cmd[2048];
+    char cmd[4096];
     struct passwd *pw = getpwuid(getuid());
     
-    /* Check if remote directory exists */
-    snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config till-%s 'mkdir -p ~/projects/github 2>/dev/null'",
-        pw->pw_dir, name);
+    /* Check if bootstrap script exists locally */
     
-    printf("Creating remote directory structure...\n");
-    if (system(cmd) != 0) {
-        fprintf(stderr, "Error: Failed to create remote directories\n");
-        return -1;
+    /* Try to find bootstrap script */
+    const char *paths[] = {
+        "./scripts/bootstrap.sh",
+        "../till/scripts/bootstrap.sh",
+        "/usr/local/share/till/scripts/bootstrap.sh",
+        NULL
+    };
+    
+    const char *found_path = NULL;
+    for (int i = 0; paths[i] != NULL; i++) {
+        if (access(paths[i], R_OK) == 0) {
+            found_path = paths[i];
+            break;
+        }
     }
     
-    /* Clone Till repository - try SSH first, fall back to HTTPS */
+    /* If we have local bootstrap script, use it */
+    if (found_path) {
+        printf("Installing Till on remote host using bootstrap script...\n");
+        
+        /* Send and execute bootstrap script */
+        snprintf(cmd, sizeof(cmd),
+            "ssh -F %s/.till/ssh/config till-%s 'bash -s' < %s",
+            pw->pw_dir, name, found_path);
+        
+        if (system(cmd) != 0) {
+            fprintf(stderr, "Error: Bootstrap script failed\n");
+            fprintf(stderr, "Check remote host for missing dependencies\n");
+            return -1;
+        }
+    } else {
+        /* Fallback to downloading bootstrap script from GitHub */
+        printf("Downloading and running Till bootstrap script...\n");
+        
+        snprintf(cmd, sizeof(cmd),
+            "ssh -F %s/.till/ssh/config till-%s "
+            "'curl -sSL https://raw.githubusercontent.com/ckoons/till/main/scripts/bootstrap.sh | bash'",
+            pw->pw_dir, name);
+        
+        if (system(cmd) != 0) {
+            fprintf(stderr, "Error: Failed to run bootstrap script\n");
+            fprintf(stderr, "Please check internet connectivity and try again\n");
+            return -1;
+        }
+    }
+    
+    /* Bootstrap script already handles installation to ~/.local/bin */
+    printf("Till binary installed to ~/.local/bin/till\n");
+    
+    /* Verify installation - check multiple locations */
     snprintf(cmd, sizeof(cmd),
         "ssh -F %s/.till/ssh/config till-%s "
-        "'cd ~/projects/github && [ -d till ] || "
-        "(git clone git@github.com:ckoons/till.git 2>/dev/null || "
-        "git clone https://github.com/ckoons/till.git)'",
-        pw->pw_dir, name);
-    
-    printf("Cloning Till repository...\n");
-    if (system(cmd) != 0) {
-        fprintf(stderr, "Error: Failed to clone Till repository\n");
-        return -1;
-    }
-    
-    /* Build Till */
-    snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config till-%s 'cd ~/projects/github/till && make'",
-        pw->pw_dir, name);
-    
-    printf("Building Till...\n");
-    if (system(cmd) != 0) {
-        fprintf(stderr, "Error: Failed to build Till\n");
-        fprintf(stderr, "You may need to install build tools on the remote host\n");
-        return -1;
-    }
-    
-    /* Create symlink */
-    snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config till-%s "
-        "'ln -sf ~/projects/github/till/till /usr/local/bin/till 2>/dev/null || "
-        "sudo ln -sf ~/projects/github/till/till /usr/local/bin/till'",
-        pw->pw_dir, name);
-    
-    printf("Installing Till...\n");
-    system(cmd);  /* May fail if no sudo, that's OK */
-    
-    /* Verify installation */
-    snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config till-%s 'till --version 2>/dev/null || ~/projects/github/till/till --version'",
+        "'~/.local/bin/till --version 2>/dev/null || "
+        "~/projects/github/till/till --version 2>/dev/null || "
+        "~/.till/till/till --version 2>/dev/null'",
         pw->pw_dir, name);
     
     printf("Verifying Till installation...\n");
@@ -532,120 +558,134 @@ int till_host_setup(const char *name) {
     }
 }
 
-/* Deploy to remote host */
-int till_host_deploy(const char *name, const char *installation) {
-    if (!name) {
-        fprintf(stderr, "Usage: till host deploy <name> [installation]\n");
+/* Execute command on remote host */
+int till_host_exec(const char *name, const char *command) {
+    if (!name || !command) {
+        fprintf(stderr, "Usage: till host exec <name> <command>\n");
+        fprintf(stderr, "\nExamples:\n");
+        fprintf(stderr, "  till host exec m2 'till status'\n");
+        fprintf(stderr, "  till host exec m2 'till install tekton --mode solo'\n");
+        fprintf(stderr, "  till host exec m2 'till run tekton status'\n");
         return -1;
     }
     
-    /* Load local installations */
-    char config_path[PATH_MAX];
+    /* Check if host exists */
+    cJSON *json = load_hosts();
+    if (!json) {
+        fprintf(stderr, "Error: No hosts configured\n");
+        return -1;
+    }
+    
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    cJSON *host = cJSON_GetObjectItem(hosts, name);
+    
+    if (!host) {
+        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        fprintf(stderr, "Run 'till host status' to see configured hosts\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    cJSON_Delete(json);
+    
+    /* Build SSH command */
+    char cmd[4096];
     struct passwd *pw = getpwuid(getuid());
-    snprintf(config_path, sizeof(config_path), "%s/.till/tekton/till-private.json", pw->pw_dir);
     
-    FILE *fp = fopen(config_path, "r");
-    if (!fp) {
-        fprintf(stderr, "Error: No local installations found. Run 'till discover' first.\n");
-        return -1;
-    }
-    
-    fseek(fp, 0, SEEK_END);
-    long size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-    
-    char *content = malloc(size + 1);
-    fread(content, 1, size, fp);
-    content[size] = '\0';
-    fclose(fp);
-    
-    cJSON *config = cJSON_Parse(content);
-    free(content);
-    
-    if (!config) {
-        fprintf(stderr, "Error: Invalid configuration\n");
-        return -1;
-    }
-    
-    cJSON *installations = cJSON_GetObjectItem(config, "installations");
-    if (!installations) {
-        fprintf(stderr, "Error: No installations found\n");
-        cJSON_Delete(config);
-        return -1;
-    }
-    
-    const char *source_path = NULL;
-    const char *deploy_name = installation;
-    
-    if (installation) {
-        /* Find specific installation */
-        cJSON *inst = cJSON_GetObjectItem(installations, installation);
-        if (!inst) {
-            fprintf(stderr, "Error: Installation '%s' not found\n", installation);
-            cJSON_Delete(config);
-            return -1;
-        }
-        cJSON *root = cJSON_GetObjectItem(inst, "root");
-        if (root) {
-            source_path = root->valuestring;
-        }
-    } else {
-        /* Use primary Tekton */
-        cJSON *inst = NULL;
-        cJSON_ArrayForEach(inst, installations) {
-            if (strstr(inst->string, "primary")) {
-                cJSON *root = cJSON_GetObjectItem(inst, "root");
-                if (root) {
-                    source_path = root->valuestring;
-                    deploy_name = inst->string;
-                }
-                break;
-            }
-        }
-    }
-    
-    if (!source_path) {
-        fprintf(stderr, "Error: Cannot find installation to deploy\n");
-        cJSON_Delete(config);
-        return -1;
-    }
-    
-    printf("Deploying '%s' to '%s'...\n", deploy_name, name);
-    printf("Source: %s\n", source_path);
-    
-    /* Use rsync to deploy */
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd),
-        "rsync -avz --delete "
-        "--exclude='.git' "
-        "--exclude='*.pyc' "
-        "--exclude='__pycache__' "
-        "--exclude='logs/' "
-        "--exclude='tmp/' "
-        "-e 'ssh -F %s/.till/ssh/config' "
-        "%s/ till-%s:~/projects/github/Tekton/",
-        pw->pw_dir, source_path, name);
-    
-    printf("Syncing files...\n");
-    if (system(cmd) != 0) {
-        fprintf(stderr, "Error: Deployment failed\n");
-        cJSON_Delete(config);
-        return -1;
-    }
-    
-    printf("✓ Successfully deployed to '%s'\n", name);
-    
-    /* Run discovery on remote */
+    /* Try to use till from PATH first, then fallback to known locations */
     snprintf(cmd, sizeof(cmd),
         "ssh -F %s/.till/ssh/config till-%s "
-        "'cd ~/projects/github/Tekton && till discover'",
-        pw->pw_dir, name);
+        "'export PATH=\"$HOME/.local/bin:$PATH\"; %s'",
+        pw->pw_dir, name, command);
     
-    printf("Running remote discovery...\n");
-    system(cmd);
+    printf("Executing on '%s': %s\n", name, command);
     
-    cJSON_Delete(config);
-    return 0;
+    /* Execute the command and return its exit status */
+    int result = system(cmd);
+    
+    if (result == -1) {
+        fprintf(stderr, "Error: Failed to execute command\n");
+        return -1;
+    }
+    
+    /* Return the exit status of the remote command */
+    return WEXITSTATUS(result);
+}
+
+/* SSH interactive session to remote host */
+int till_host_ssh(const char *name, int argc, char *argv[]) {
+    if (!name) {
+        fprintf(stderr, "Usage: till host ssh <name> [command...]\n");
+        fprintf(stderr, "\nExamples:\n");
+        fprintf(stderr, "  till host ssh m2                # Open interactive shell\n");
+        fprintf(stderr, "  till host ssh m2 vim config.txt # Run interactive command\n");
+        return -1;
+    }
+    
+    /* Check if host exists */
+    cJSON *json = load_hosts();
+    if (!json) {
+        fprintf(stderr, "Error: No hosts configured\n");
+        return -1;
+    }
+    
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    cJSON *host = cJSON_GetObjectItem(hosts, name);
+    
+    if (!host) {
+        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        fprintf(stderr, "Run 'till host status' to see configured hosts\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    cJSON_Delete(json);
+    
+    /* Build SSH command arguments */
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        /* Fallback to old method if new one fails */
+        struct passwd *pw = getpwuid(getuid());
+        snprintf(till_dir, sizeof(till_dir), "%s/.till", pw->pw_dir);
+    }
+    
+    /* Prepare SSH arguments */
+    char config_path[PATH_MAX];
+    char host_alias[256];
+    
+    snprintf(config_path, sizeof(config_path), "%s/ssh/config", till_dir);
+    snprintf(host_alias, sizeof(host_alias), "till-%s", name);
+    
+    /* Build argument array for execvp */
+    char **ssh_args = malloc((argc + 6) * sizeof(char *));
+    if (!ssh_args) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        return -1;
+    }
+    
+    int i = 0;
+    ssh_args[i++] = "ssh";
+    ssh_args[i++] = "-F";
+    ssh_args[i++] = config_path;
+    ssh_args[i++] = "-t";  /* Force pseudo-terminal allocation for interactive use */
+    ssh_args[i++] = host_alias;
+    
+    /* Add any additional command arguments */
+    for (int j = 0; j < argc; j++) {
+        ssh_args[i++] = argv[j];
+    }
+    ssh_args[i] = NULL;
+    
+    /* Execute SSH, replacing the current process */
+    printf("Connecting to '%s'...\n", name);
+    fflush(stdout);
+    
+    execvp("ssh", ssh_args);
+    
+    /* If we get here, exec failed */
+    fprintf(stderr, "Error: Failed to execute SSH: %s\n", strerror(errno));
+    free(ssh_args);
+    return -1;
 }
 
 /* Sync from remote host */
@@ -935,8 +975,50 @@ int till_host_status(const char *name) {
     return 0;
 }
 
+/* Print host command help */
+static void print_host_help(void) {
+    printf("Till Host Management Commands\n\n");
+    printf("Usage: till host <command> [arguments]\n\n");
+    printf("Commands:\n");
+    printf("  init                    Initialize SSH environment and generate keys\n");
+    printf("  add <name> <user@host>  Add a new host to Till management\n");
+    printf("  test <name>             Test SSH connectivity to a host\n");
+    printf("  setup <name>            Install Till on remote host\n");
+    printf("  exec <name> <command>   Execute Till command on remote host\n");
+    printf("  ssh <name> [command]    Open SSH session to remote host\n");
+    printf("  sync [name]             Sync updates from remote host(s)\n");
+    printf("  status [name]           Show host configuration and status\n");
+    printf("  remove <name> [opts]    Remove a host from Till configuration\n");
+    printf("\nOptions:\n");
+    printf("  --help, -h              Show this help message\n");
+    printf("\nExamples:\n");
+    printf("  till host init                           # Generate SSH keys\n");
+    printf("  till host add m2 casey@10.10.10.2       # Add host 'm2'\n");
+    printf("  till host test m2                       # Test connection\n");
+    printf("  till host setup m2                      # Install Till on m2\n");
+    printf("  till host exec m2 'till status'         # Run status on m2\n");
+    printf("  till host exec m2 'till install tekton' # Install Tekton on m2\n");
+    printf("  till host ssh m2                        # Open interactive shell\n");
+    printf("  till host ssh m2 ls -la                 # Run command on m2\n");
+    printf("  till host sync                          # Sync all hosts\n");
+    printf("  till host remove m2                     # Remove host (keep remote)\n");
+    printf("  till host remove m2 --clean-remote      # Remove and clean remote\n");
+    printf("\nSSH Configuration:\n");
+    printf("  SSH config: ~/.till/ssh/config\n");
+    printf("  SSH keys:   ~/.till/ssh/till_federation_ed25519\n");
+    printf("  Hosts file: ~/.till/hosts-local.json\n");
+}
+
 /* Main host command handler */
 int till_host_command(int argc, char *argv[]) {
+    /* Check for help flag at any position */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            print_host_help();
+            return 0;
+        }
+    }
+    
     if (argc < 2) {
         /* Default to status */
         return till_host_status(NULL);
@@ -972,12 +1054,25 @@ int till_host_command(int argc, char *argv[]) {
         }
         return till_host_setup(argv[2]);
     }
-    else if (strcmp(subcmd, "deploy") == 0) {
-        if (argc < 3) {
-            fprintf(stderr, "Usage: till host deploy <name> [installation]\n");
+    else if (strcmp(subcmd, "exec") == 0) {
+        if (argc < 4) {
+            fprintf(stderr, "Usage: till host exec <name> <command>\n");
             return -1;
         }
-        return till_host_deploy(argv[2], argc > 3 ? argv[3] : NULL);
+        /* Combine remaining arguments into a single command string */
+        char command[4096] = "";
+        for (int i = 3; i < argc; i++) {
+            if (i > 3) strcat(command, " ");
+            strcat(command, argv[i]);
+        }
+        return till_host_exec(argv[2], command);
+    }
+    else if (strcmp(subcmd, "ssh") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: till host ssh <name> [command]\n");
+            return -1;
+        }
+        return till_host_ssh(argv[2], argc - 3, argv + 3);
     }
     else if (strcmp(subcmd, "sync") == 0) {
         return till_host_sync(argc > 2 ? argv[2] : NULL);
@@ -997,16 +1092,8 @@ int till_host_command(int argc, char *argv[]) {
         return till_host_remove(argv[2], clean_remote);
     }
     else {
-        fprintf(stderr, "Unknown host subcommand: %s\n", subcmd);
-        fprintf(stderr, "Available commands:\n");
-        fprintf(stderr, "  init    - Initialize SSH environment and generate federation key\n");
-        fprintf(stderr, "  add     - Add a new host\n");
-        fprintf(stderr, "  test    - Test connection to a host\n");
-        fprintf(stderr, "  setup   - Install Till on remote host\n");
-        fprintf(stderr, "  deploy  - Deploy Tekton to remote host\n");
-        fprintf(stderr, "  sync    - Sync updates from remote host\n");
-        fprintf(stderr, "  status  - Show host status\n");
-        fprintf(stderr, "  remove  - Remove a host from Till configuration\n");
+        fprintf(stderr, "Unknown host subcommand: %s\n\n", subcmd);
+        print_host_help();
         return -1;
     }
 }

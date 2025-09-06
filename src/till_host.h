@@ -17,8 +17,11 @@ int till_host_test(const char *name);
 /* Setup Till on remote host */
 int till_host_setup(const char *name);
 
-/* Deploy to remote host */
-int till_host_deploy(const char *name, const char *installation);
+/* Execute command on remote host */
+int till_host_exec(const char *name, const char *command);
+
+/* SSH interactive session to remote host */
+int till_host_ssh(const char *name, int argc, char *argv[]);
 
 /* Sync from remote host */
 int till_host_sync(const char *name);
