@@ -218,11 +218,14 @@ static int save_hosts(cJSON *json) {
 
 /* Add SSH config entry for a host */
 static int add_ssh_config_entry(const char *name, const char *user, const char *host, int port) {
-    char path[PATH_MAX];
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return -1;
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        return -1;
+    }
     
-    snprintf(path, sizeof(path), "%s/.till/ssh/config", pw->pw_dir);
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s/ssh/config", till_dir);
     
     FILE *fp = fopen(path, "a");
     if (!fp) {
@@ -242,7 +245,7 @@ static int add_ssh_config_entry(const char *name, const char *user, const char *
     if (port != 22) {
         fprintf(fp, "    Port %d\n", port);
     }
-    fprintf(fp, "    IdentityFile ~/.till/ssh/till_federation_ed25519\n");
+    fprintf(fp, "    IdentityFile %s/ssh/till_federation_ed25519\n", till_dir);
     fprintf(fp, "    IdentitiesOnly yes\n\n");
     
     fclose(fp);
@@ -323,44 +326,197 @@ int till_host_add(const char *name, const char *user_at_host) {
     
     cJSON_AddItemToObject(hosts, name, host_obj);
     
-    /* Add SSH config entry */
-    if (add_ssh_config_entry(name, user, host, port) != 0) {
-        fprintf(stderr, "Warning: Failed to add SSH config entry\n");
+    /* Get Till directory */
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        cJSON_Delete(json);
+        return -1;
     }
     
-    /* Save hosts */
+    /* Save hosts first */
     if (save_hosts(json) != 0) {
         fprintf(stderr, "Error: Failed to save hosts\n");
         cJSON_Delete(json);
         return -1;
     }
     
+    /* Add SSH config entry */
+    if (add_ssh_config_entry(name, user, host, port) != 0) {
+        fprintf(stderr, "Warning: Failed to add SSH config entry\n");
+    }
+    
     printf("✓ Host '%s' added (%s@%s:%d)\n", name, user, host, port);
     printf("  SSH alias: till-%s\n", name);
     
-    /* Test basic SSH connectivity */
-    printf("\nTesting SSH connection...\n");
+    /* Step 1: Test basic connectivity */
+    printf("\nStep 1: Testing connectivity...\n");
+    char ping_cmd[512];
+    snprintf(ping_cmd, sizeof(ping_cmd), "ping -c 1 -W 2 %s >/dev/null 2>&1", host);
+    if (system(ping_cmd) != 0) {
+        printf("✗ Host is not reachable. Check network connection.\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    printf("✓ Host is reachable\n");
+    
+    /* Step 2: Check if SSH is running on remote */
+    printf("\nStep 2: Checking SSH service...\n");
+    char ssh_check[512];
+    snprintf(ssh_check, sizeof(ssh_check), "nc -w 2 -z %s %d 2>/dev/null", host, port);
+    
+    if (system(ssh_check) != 0) {
+        printf("✗ SSH is not running on %s\n", host);
+        printf("Attempting to enable SSH...\n");
+        
+        /* For Mac: Need physical access or already enabled Remote Login */
+        printf("\nFor macOS:\n");
+        printf("  1. On %s, go to System Settings > General > Sharing\n", host);
+        printf("  2. Turn on 'Remote Login'\n");
+        printf("  3. Re-run: till host add %s %s\n", name, user_at_host);
+        
+        cJSON_Delete(json);
+        return -1;
+    }
+    printf("✓ SSH service is running\n");
+    
+    /* Step 3: Test SSH with key authentication */
+    printf("\nStep 3: Testing SSH key authentication...\n");
     char test_cmd[1024];
-    struct passwd *pw = getpwuid(getuid());
     snprintf(test_cmd, sizeof(test_cmd),
         "ssh -o ConnectTimeout=5 -o PasswordAuthentication=no "
-        "-i %s/.till/ssh/till_federation_ed25519 %s@%s -p %d 'echo OK' 2>/dev/null",
-        pw->pw_dir, user, host, port);
+        "-i %s/ssh/till_federation_ed25519 %s@%s -p %d 'echo OK' 2>/dev/null",
+        till_dir, user, host, port);
     
-    if (system(test_cmd) == 0) {
-        printf("✓ SSH key already configured\n");
-        printf("\nReady to use. Next steps:\n");
-        printf("  1. Setup Till: till host setup %s\n", name);
-        printf("  2. Deploy Tekton: till host deploy %s\n", name);
-    } else {
+    if (system(test_cmd) != 0) {
+        /* Step 4: Copy SSH key using ssh-copy-id */
         printf("✗ SSH key not configured\n");
-        printf("\nTo enable passwordless access, copy your Till SSH key:\n");
-        printf("  ssh-copy-id -i ~/.till/ssh/till_federation_ed25519.pub %s@%s", user, host);
+        printf("\nStep 4: Setting up SSH key authentication...\n");
+        printf("You'll be prompted for the password for %s@%s\n", user, host);
+        
+        char copy_cmd[1024];
         if (port != 22) {
-            printf(" -p %d", port);
+            snprintf(copy_cmd, sizeof(copy_cmd),
+                "ssh-copy-id -i %s/ssh/till_federation_ed25519.pub -p %d %s@%s",
+                till_dir, port, user, host);
+        } else {
+            snprintf(copy_cmd, sizeof(copy_cmd),
+                "ssh-copy-id -i %s/ssh/till_federation_ed25519.pub %s@%s",
+                till_dir, user, host);
         }
-        printf("\n\nThen test with: till host test %s\n", name);
+        
+        if (system(copy_cmd) != 0) {
+            printf("\n✗ Failed to copy SSH key\n");
+            printf("Please manually copy the key or check SSH access\n");
+            cJSON_Delete(json);
+            return -1;
+        }
+        
+        /* Verify key auth now works */
+        if (system(test_cmd) != 0) {
+            printf("✗ SSH key authentication still not working\n");
+            cJSON_Delete(json);
+            return -1;
+        }
     }
+    printf("✓ SSH key authentication configured\n");
+    
+    /* Step 5: Detect remote platform */
+    printf("\nStep 5: Detecting remote platform...\n");
+    char detect_cmd[512];
+    char platform[64] = "unknown";
+    snprintf(detect_cmd, sizeof(detect_cmd),
+        "ssh -F %s/ssh/config till-%s 'uname -s' 2>/dev/null",
+        till_dir, name);
+    
+    FILE *fp = popen(detect_cmd, "r");
+    if (fp) {
+        if (fgets(platform, sizeof(platform), fp)) {
+            /* Remove newline */
+            platform[strcspn(platform, "\n")] = '\0';
+        }
+        pclose(fp);
+    }
+    printf("✓ Remote platform: %s\n", platform);
+    
+    /* Step 6: Install Till on remote */
+    printf("\nStep 6: Installing Till on remote host...\n");
+    
+    /* Check if Till already exists */
+    char check_till[512];
+    snprintf(check_till, sizeof(check_till),
+        "ssh -F %s/ssh/config till-%s 'test -d ~/projects/github/till && echo EXISTS' 2>/dev/null",
+        till_dir, name);
+    
+    fp = popen(check_till, "r");
+    char exists[32] = "";
+    if (fp) {
+        fgets(exists, sizeof(exists), fp);
+        pclose(fp);
+    }
+    
+    if (strstr(exists, "EXISTS")) {
+        printf("✓ Till already installed on remote\n");
+        
+        /* Update it with till update */
+        char update_cmd[1024];
+        snprintf(update_cmd, sizeof(update_cmd),
+            "ssh -F %s/ssh/config till-%s 'cd ~/projects/github/till && ./till update' 2>&1",
+            till_dir, name);
+        
+        printf("  Updating Till on remote...\n");
+        if (system(update_cmd) == 0) {
+            printf("✓ Till updated successfully\n");
+        } else {
+            printf("⚠ Warning: Till update failed (may be local changes)\n");
+        }
+    } else {
+        /* Install fresh */
+        char install_cmd[2048];
+        snprintf(install_cmd, sizeof(install_cmd),
+            "ssh -F %s/ssh/config till-%s '"
+            "mkdir -p ~/projects/github && "
+            "cd ~/projects/github && "
+            "git clone https://github.com/cskoons/till.git && "
+            "cd till && "
+            "make' 2>&1",
+            till_dir, name);
+        
+        printf("  Cloning and building Till...\n");
+        if (system(install_cmd) != 0) {
+            printf("✗ Failed to install Till on remote\n");
+            printf("  Try manually: ssh till-%s\n", name);
+            cJSON_Delete(json);
+            return -1;
+        }
+        printf("✓ Till installed successfully\n");
+    }
+    
+    /* Step 7: Verify Till works on remote */
+    printf("\nStep 7: Verifying Till installation...\n");
+    char verify_cmd[512];
+    snprintf(verify_cmd, sizeof(verify_cmd),
+        "ssh -F %s/ssh/config till-%s '~/projects/github/till/till --version' 2>/dev/null",
+        till_dir, name);
+    
+    fp = popen(verify_cmd, "r");
+    if (fp) {
+        char version[128];
+        if (fgets(version, sizeof(version), fp)) {
+            printf("✓ Remote Till: %s", version);
+        }
+        pclose(fp);
+    }
+    
+    /* Update host status to 'ready' */
+    cJSON_SetValuestring(cJSON_GetObjectItem(host_obj, "status"), "ready");
+    save_hosts(json);
+    
+    printf("\n✅ Host '%s' fully configured and ready!\n", name);
+    printf("\nYou can now use:\n");
+    printf("  till host ssh %s          # Interactive shell\n", name);
+    printf("  till host exec %s <cmd>   # Run remote commands\n", name);
+    printf("  till host status %s       # Check status\n", name);
     
     cJSON_Delete(json);
     return 0;
