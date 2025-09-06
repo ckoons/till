@@ -76,7 +76,7 @@ static void print_version(void);
 extern int suggest_next_port_range(int *main_port, int *ai_port);
 extern int get_primary_tekton_path(char *path, size_t size);
 static command_t parse_command(const char *cmd);
-static subcommand_t parse_subcommand(const char *subcmd);
+/* static subcommand_t parse_subcommand(const char *subcmd); */ /* Currently unused */
 static int cmd_help(int argc, char *argv[]);
 static int cmd_sync(int argc, char *argv[]);
 static int cmd_watch(int argc, char *argv[]);
@@ -281,7 +281,8 @@ static command_t parse_command(const char *cmd) {
     return CMD_NONE;
 }
 
-/* Parse subcommand string */
+/* Parse subcommand string - Currently unused but may be useful later */
+#if 0
 static subcommand_t parse_subcommand(const char *subcmd) {
     if (!subcmd) return SUBCMD_NONE;
     if (strcmp(subcmd, "add") == 0) return SUBCMD_ADD;
@@ -293,6 +294,7 @@ static subcommand_t parse_subcommand(const char *subcmd) {
     if (strcmp(subcmd, "apply") == 0) return SUBCMD_APPLY;
     return SUBCMD_NONE;
 }
+#endif
 
 /* Dry run - show what sync would do */
 static int dry_run(void) {
