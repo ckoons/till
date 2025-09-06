@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <limits.h>
 
 #include "till_config.h"
 #include "till_install.h"
@@ -54,7 +55,8 @@ typedef enum {
     CMD_HOST,
     CMD_FEDERATE,
     CMD_STATUS,
-    CMD_RUN
+    CMD_RUN,
+    CMD_UPDATE
 } command_t;
 
 typedef enum {
@@ -88,6 +90,7 @@ static int cmd_host(int argc, char *argv[]);
 static int cmd_federate(int argc, char *argv[]);
 static int cmd_status(int argc, char *argv[]);
 static int cmd_run(int argc, char *argv[]);
+static int cmd_update(int argc, char *argv[]);
 static int dry_run(void);
 static int ensure_directories(void);
 static int ensure_discovery(void);
@@ -195,6 +198,9 @@ int main(int argc, char *argv[]) {
         case CMD_RUN:
             result = cmd_run(argc - 2, argv + 2);
             break;
+        case CMD_UPDATE:
+            result = cmd_update(argc - 1, argv + 1);
+            break;
         case CMD_HELP:
             result = cmd_help(argc - 1, argv + 1);
             break;
@@ -242,6 +248,7 @@ static void print_usage(const char *program) {
     printf("  federate leave      Leave federation\n");
     printf("  federate status     Show federation status\n");
     printf("  status              Show Till status\n");
+    printf("  update              Update Till from git repository\n");
     printf("\nExamples:\n");
     printf("  till                      # Show what would be synced\n");
     printf("  till sync                 # Synchronize now\n");
@@ -277,6 +284,7 @@ static command_t parse_command(const char *cmd) {
     if (strcmp(cmd, "federate") == 0) return CMD_FEDERATE;
     if (strcmp(cmd, "status") == 0) return CMD_STATUS;
     if (strcmp(cmd, "run") == 0) return CMD_RUN;
+    if (strcmp(cmd, "update") == 0) return CMD_UPDATE;
     if (strcmp(cmd, "help") == 0) return CMD_HELP;
     return CMD_NONE;
 }
@@ -1043,6 +1051,158 @@ static int cmd_status(int argc, char *argv[]) {
 static int cmd_run(int argc, char *argv[]) {
     /* Delegate to till_run module */
     return till_run_command(argc, argv);
+}
+
+/* Command: update - Update Till from git repository */
+static int cmd_update(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    
+    printf("Till Update - Self-update from git repository\n");
+    printf("==============================================\n\n");
+    
+    /* Get Till directory */
+    char till_dir[PATH_MAX];
+    if (get_till_directory(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        fprintf(stderr, "Till must be installed via git clone\n");
+        return EXIT_FILE_ERROR;
+    }
+    
+    printf("Till directory: %s\n", till_dir);
+    
+    /* Step 1: Check if we're in a git repository */
+    printf("\n1. Checking git repository...\n");
+    char git_check[PATH_MAX + 64];
+    snprintf(git_check, sizeof(git_check), "cd '%s' && git rev-parse --git-dir >/dev/null 2>&1", till_dir);
+    
+    if (system(git_check) != 0) {
+        fprintf(stderr, "✗ Not a git repository\n");
+        fprintf(stderr, "Till must be installed via: git clone https://github.com/cskoons/till\n");
+        return EXIT_FILE_ERROR;
+    }
+    printf("✓ Git repository found\n");
+    
+    /* Step 2: Check current version and branch */
+    printf("\n2. Checking current version...\n");
+    printf("  Version: %s\n", TILL_VERSION);
+    
+    char branch_cmd[PATH_MAX + 64];
+    snprintf(branch_cmd, sizeof(branch_cmd), "cd '%s' && git branch --show-current", till_dir);
+    FILE *fp = popen(branch_cmd, "r");
+    if (fp) {
+        char branch[128];
+        if (fgets(branch, sizeof(branch), fp)) {
+            branch[strcspn(branch, "\n")] = '\0';
+            printf("  Branch: %s\n", branch);
+        }
+        pclose(fp);
+    }
+    
+    /* Step 3: Check for local changes */
+    printf("\n3. Checking for local changes...\n");
+    char status_cmd[PATH_MAX + 64];
+    snprintf(status_cmd, sizeof(status_cmd), "cd '%s' && git status --porcelain", till_dir);
+    
+    fp = popen(status_cmd, "r");
+    if (fp) {
+        char line[256];
+        int has_changes = 0;
+        while (fgets(line, sizeof(line), fp)) {
+            if (!has_changes) {
+                printf("⚠ Local changes detected:\n");
+                has_changes = 1;
+            }
+            printf("  %s", line);
+        }
+        pclose(fp);
+        
+        if (has_changes) {
+            printf("\nStashing local changes...\n");
+            char stash_cmd[PATH_MAX + 64];
+            snprintf(stash_cmd, sizeof(stash_cmd), "cd '%s' && git stash", till_dir);
+            system(stash_cmd);
+        } else {
+            printf("✓ No local changes\n");
+        }
+    }
+    
+    /* Step 4: Pull latest from git */
+    printf("\n4. Pulling latest updates...\n");
+    char pull_cmd[PATH_MAX + 64];
+    snprintf(pull_cmd, sizeof(pull_cmd), "cd '%s' && git pull", till_dir);
+    
+    if (system(pull_cmd) != 0) {
+        fprintf(stderr, "✗ Git pull failed\n");
+        fprintf(stderr, "Check your network connection and git configuration\n");
+        return EXIT_GENERAL_ERROR;
+    }
+    printf("✓ Updates pulled successfully\n");
+    
+    /* Step 5: Rebuild Till */
+    printf("\n5. Rebuilding Till...\n");
+    char make_cmd[PATH_MAX + 64];
+    snprintf(make_cmd, sizeof(make_cmd), "cd '%s' && make clean && make", till_dir);
+    
+    if (system(make_cmd) != 0) {
+        fprintf(stderr, "✗ Build failed\n");
+        fprintf(stderr, "Check compilation errors above\n");
+        return EXIT_GENERAL_ERROR;
+    }
+    printf("✓ Till rebuilt successfully\n");
+    
+    /* Step 6: Update installed version */
+    printf("\n6. Updating installed version...\n");
+    
+    /* Check where till is installed */
+    fp = popen("which till 2>/dev/null", "r");
+    if (fp) {
+        char installed_path[PATH_MAX];
+        if (fgets(installed_path, sizeof(installed_path), fp)) {
+            installed_path[strcspn(installed_path, "\n")] = '\0';
+            printf("  Installed at: %s\n", installed_path);
+            
+            /* Determine if it's user or system install */
+            if (strstr(installed_path, "/.local/bin/")) {
+                /* User installation */
+                printf("  Updating user installation...\n");
+                char install_cmd[PATH_MAX + 64];
+                snprintf(install_cmd, sizeof(install_cmd), "cd '%s' && make install-user", till_dir);
+                
+                if (system(install_cmd) == 0) {
+                    printf("✓ User installation updated\n");
+                } else {
+                    printf("⚠ Failed to update user installation\n");
+                    printf("  Run manually: cd %s && make install-user\n", till_dir);
+                }
+            } else if (strstr(installed_path, "/usr/local/bin/")) {
+                /* System installation */
+                printf("  System installation detected\n");
+                printf("  Run with sudo: cd %s && sudo make install\n", till_dir);
+            } else {
+                printf("  Custom installation path\n");
+                printf("  Copy manually: cp %s/till %s\n", till_dir, installed_path);
+            }
+        } else {
+            printf("  No installed version found\n");
+            printf("  Install with: cd %s && make install-user\n", till_dir);
+        }
+        pclose(fp);
+    }
+    
+    /* Step 7: Show new version */
+    printf("\n7. Verifying update...\n");
+    char version_cmd[PATH_MAX + 64];
+    snprintf(version_cmd, sizeof(version_cmd), "%s/till --version", till_dir);
+    system(version_cmd);
+    
+    printf("\n✅ Till update complete!\n");
+    printf("\nNext steps:\n");
+    printf("  - Restart your shell or run: hash -r\n");
+    printf("  - Verify with: till --version\n");
+    printf("  - Update remote hosts: till host exec <name> 'till update'\n");
+    
+    return EXIT_SUCCESS;
 }
 
 /* Command: help */
