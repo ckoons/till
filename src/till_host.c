@@ -349,39 +349,31 @@ int till_host_add(const char *name, const char *user_at_host) {
     printf("✓ Host '%s' added (%s@%s:%d)\n", name, user, host, port);
     printf("  SSH alias: till-%s\n", name);
     
-    /* Step 1: Test basic connectivity */
-    printf("\nStep 1: Testing connectivity...\n");
-    char ping_cmd[512];
-    snprintf(ping_cmd, sizeof(ping_cmd), "ping -c 1 -W 2 %s >/dev/null 2>&1", host);
-    if (system(ping_cmd) != 0) {
-        printf("✗ Host is not reachable. Check network connection.\n");
-        cJSON_Delete(json);
-        return -1;
-    }
-    printf("✓ Host is reachable\n");
+    /* Step 1: Test SSH connectivity directly */
+    printf("\nStep 1: Testing SSH connectivity...\n");
+    char ssh_test[512];
+    snprintf(ssh_test, sizeof(ssh_test), 
+        "ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no "
+        "-o PasswordAuthentication=no -p %d %s@%s exit 2>/dev/null || "
+        "ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -p %d %s@%s exit 2>/dev/null",
+        port, user, host, port, user, host);
     
-    /* Step 2: Check if SSH is running on remote */
-    printf("\nStep 2: Checking SSH service...\n");
-    char ssh_check[512];
-    snprintf(ssh_check, sizeof(ssh_check), "nc -w 2 -z %s %d 2>/dev/null", host, port);
-    
-    if (system(ssh_check) != 0) {
-        printf("✗ SSH is not running on %s\n", host);
-        printf("Attempting to enable SSH...\n");
-        
-        /* For Mac: Need physical access or already enabled Remote Login */
-        printf("\nFor macOS:\n");
-        printf("  1. On %s, go to System Settings > General > Sharing\n", host);
+    if (system(ssh_test) != 0) {
+        printf("✗ Cannot connect via SSH to %s@%s:%d\n", user, host, port);
+        printf("  Please verify:\n");
+        printf("  - The hostname/IP is correct\n");
+        printf("  - SSH is enabled on the remote host\n");
+        printf("  - Your credentials are correct\n");
+        printf("\nFor macOS remote hosts:\n");
+        printf("  1. Go to System Settings > General > Sharing\n");
         printf("  2. Turn on 'Remote Login'\n");
-        printf("  3. Re-run: till host add %s %s\n", name, user_at_host);
-        
         cJSON_Delete(json);
         return -1;
     }
-    printf("✓ SSH service is running\n");
+    printf("✓ SSH connectivity confirmed\n");
     
-    /* Step 3: Test SSH with key authentication */
-    printf("\nStep 3: Testing SSH key authentication...\n");
+    /* Step 2: Test SSH with key authentication */
+    printf("\nStep 2: Testing SSH key authentication...\n");
     char test_cmd[1024];
     snprintf(test_cmd, sizeof(test_cmd),
         "ssh -o ConnectTimeout=5 -o PasswordAuthentication=no "
@@ -389,9 +381,9 @@ int till_host_add(const char *name, const char *user_at_host) {
         till_dir, user, host, port);
     
     if (system(test_cmd) != 0) {
-        /* Step 4: Copy SSH key using ssh-copy-id */
+        /* Step 3: Copy SSH key using ssh-copy-id */
         printf("✗ SSH key not configured\n");
-        printf("\nStep 4: Setting up SSH key authentication...\n");
+        printf("\nStep 3: Setting up SSH key authentication...\n");
         printf("You'll be prompted for the password for %s@%s\n", user, host);
         
         char copy_cmd[1024];
@@ -421,8 +413,8 @@ int till_host_add(const char *name, const char *user_at_host) {
     }
     printf("✓ SSH key authentication configured\n");
     
-    /* Step 5: Detect remote platform */
-    printf("\nStep 5: Detecting remote platform...\n");
+    /* Step 4: Detect remote platform */
+    printf("\nStep 4: Detecting remote platform...\n");
     char detect_cmd[512];
     char platform[64] = "unknown";
     snprintf(detect_cmd, sizeof(detect_cmd),
@@ -439,8 +431,8 @@ int till_host_add(const char *name, const char *user_at_host) {
     }
     printf("✓ Remote platform: %s\n", platform);
     
-    /* Step 6: Install Till on remote */
-    printf("\nStep 6: Installing Till on remote host...\n");
+    /* Step 5: Install Till on remote */
+    printf("\nStep 5: Installing Till on remote host...\n");
     
     /* Check if Till already exists */
     char check_till[512];
@@ -477,7 +469,7 @@ int till_host_add(const char *name, const char *user_at_host) {
             "ssh -F %s/ssh/config till-%s '"
             "mkdir -p ~/projects/github && "
             "cd ~/projects/github && "
-            "git clone https://github.com/cskoons/till.git && "
+            "git clone " TILL_REPO_URL ".git && "
             "cd till && "
             "make' 2>&1",
             till_dir, name);
@@ -492,8 +484,8 @@ int till_host_add(const char *name, const char *user_at_host) {
         printf("✓ Till installed successfully\n");
     }
     
-    /* Step 7: Verify Till works on remote */
-    printf("\nStep 7: Verifying Till installation...\n");
+    /* Step 6: Verify Till works on remote */
+    printf("\nStep 6: Verifying Till installation...\n");
     char verify_cmd[512];
     snprintf(verify_cmd, sizeof(verify_cmd),
         "ssh -F %s/ssh/config till-%s '~/projects/github/till/till --version' 2>/dev/null",

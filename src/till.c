@@ -1078,7 +1078,7 @@ static int cmd_update(int argc, char *argv[]) {
     
     if (system(git_check) != 0) {
         fprintf(stderr, "✗ Not a git repository\n");
-        fprintf(stderr, "Till must be installed via: git clone https://github.com/cskoons/till\n");
+        fprintf(stderr, "Till must be installed via: git clone " TILL_REPO_URL "\n");
         return EXIT_FILE_ERROR;
     }
     printf("✓ Git repository found\n");
@@ -1197,6 +1197,15 @@ static int cmd_update(int argc, char *argv[]) {
     system(version_cmd);
     
     printf("\n✅ Till update complete!\n");
+    
+    /* Step 8: Initialize host management if needed */
+    printf("\n8. Initializing host management...\n");
+    if (till_host_init() == 0) {
+        printf("✓ Host management initialized\n");
+    } else {
+        printf("⚠ Host management already initialized\n");
+    }
+    
     printf("\nNext steps:\n");
     printf("  - Restart your shell or run: hash -r\n");
     printf("  - Verify with: till --version\n");
