@@ -475,6 +475,21 @@ int till_install_tekton(install_options_t *opts) {
         return -1;
     }
     
+    /* Step 1.5: Install Python dependencies */
+    printf("Installing Python dependencies...\n");
+    char pip_cmd[TILL_MAX_PATH * 2];
+    snprintf(pip_cmd, sizeof(pip_cmd), 
+             "cd %s && pip install -e . > /dev/null 2>&1", opts->path);
+    
+    printf("  Running pip install (this may take a few minutes)...\n");
+    if (system(pip_cmd) != 0) {
+        fprintf(stderr, "Warning: Failed to install Python dependencies\n");
+        fprintf(stderr, "  You may need to run 'pip install -e .' manually in %s\n", opts->path);
+        /* Not a fatal error - continue with installation */
+    } else {
+        printf("  Python dependencies installed successfully\n");
+    }
+    
     /* Step 2: Generate .env.local */
     if (generate_env_local(opts) != 0) {
         fprintf(stderr, "Failed to generate .env.local\n");
@@ -516,6 +531,7 @@ int till_install_tekton(install_options_t *opts) {
     }
     
     printf("\nTekton installation complete!\n");
+    printf("Python dependencies have been installed.\n");
     printf("To start: cd %s && tekton start\n", opts->path);
     
     return 0;
@@ -527,8 +543,9 @@ int suggest_next_port_range(int *main_port, int *ai_port) {
     snprintf(config_path, sizeof(config_path), 
              "%s/%s", TILL_TEKTON_DIR, TILL_PRIVATE_CONFIG);
     
-    int max_main_port = 8000;
-    int min_ai_port = 45000;
+    int max_main_port = -1;  /* Start with -1 to detect if any installations exist */
+    int min_ai_port = -1;
+    int found_installations = 0;
     
     FILE *fp = fopen(config_path, "r");
     if (fp) {
@@ -554,14 +571,16 @@ int suggest_next_port_range(int *main_port, int *ai_port) {
                     
                     if (port_item && cJSON_IsNumber(port_item)) {
                         int port = port_item->valueint;
-                        if (port >= max_main_port) {
+                        found_installations = 1;
+                        if (max_main_port == -1 || port >= max_main_port) {
                             max_main_port = port;
                         }
                     }
                     
                     if (ai_port_item && cJSON_IsNumber(ai_port_item)) {
                         int port = ai_port_item->valueint;
-                        if (port <= min_ai_port) {
+                        found_installations = 1;
+                        if (min_ai_port == -1 || port <= min_ai_port) {
                             min_ai_port = port;
                         }
                     }
@@ -571,11 +590,17 @@ int suggest_next_port_range(int *main_port, int *ai_port) {
         }
     }
     
-    /* Suggest next main port range (increment by 100) */
-    *main_port = max_main_port + 100;
-    
-    /* Suggest next AI port range (decrement by 1000) */
-    *ai_port = min_ai_port - 1000;
+    /* If no installations found, use the default primary ports */
+    if (!found_installations) {
+        *main_port = 8000;
+        *ai_port = 45000;
+    } else {
+        /* Suggest next main port range (increment by 100) */
+        *main_port = max_main_port + 100;
+        
+        /* Suggest next AI port range (decrement by 1000) */
+        *ai_port = min_ai_port - 1000;
+    }
     
     /* Ensure ranges are valid */
     if (*main_port > 60000) {
