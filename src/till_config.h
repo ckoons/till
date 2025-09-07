@@ -53,9 +53,15 @@
 #define TILL_SSH_KEY_COMMENT "federation@%s"
 #define TILL_SSH_KEY_TYPE "ed25519"
 
-/* Remote Installation Paths */
-#define TILL_REMOTE_INSTALL_PATH "~/projects/github/till"
-#define TILL_REMOTE_TILL_DIR "~/.till"
+/* Remote Installation Paths - NO HOME DIRECTORY REFERENCES */
+#define TILL_REMOTE_INSTALL_PATH "projects/github/till"  /* Relative to user home */
+#define TILL_REMOTE_BINARY_PATH ".local/bin/till"        /* Relative to user home */
+#define TILL_PROJECTS_BASE "projects/github"              /* Base for projects */
+
+/* Local Till Directories - ALL RELATIVE TO PROJECT */
+#define TILL_DIR_NAME ".till"
+#define TILL_RC_DIR ".tillrc"
+#define TILL_COMMANDS_DIR ".tillrc/commands"
 
 /* Status Values */
 #define TILL_STATUS_READY "ready"

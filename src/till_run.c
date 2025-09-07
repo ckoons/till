@@ -2,7 +2,7 @@
  * till_run.c - Component command execution for Till
  * 
  * Discovers and executes commands from installed components
- * via their .tillrc/commands/ directory.
+ * via their TILL_COMMANDS_DIR/ directory.
  */
 
 #include <stdio.h>
@@ -18,6 +18,7 @@
 
 #include "till_config.h"
 #include "till_run.h"
+#include "till_common.h"
 #include "cJSON.h"
 
 #ifndef PATH_MAX
@@ -34,11 +35,8 @@ typedef struct {
 
 /* Get till configuration directory */
 static int get_till_config_dir(char *dir, size_t size) {
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return -1;
-    
-    snprintf(dir, size, "%s/.till", pw->pw_dir);
-    return 0;
+    /* Use the common get_till_dir function - NO HOME DIRECTORY */
+    return get_till_dir(dir, size);
 }
 
 /* Load installed components from till-private.json */
@@ -94,10 +92,10 @@ static void extract_component_name(const char *registry_name, char *component) {
     }
 }
 
-/* Check if component has .tillrc/commands directory */
+/* Check if component has TILL_COMMANDS_DIR directory */
 static int has_command_directory(const char *root) {
     char cmd_dir[PATH_MAX];
-    snprintf(cmd_dir, sizeof(cmd_dir), "%s/.tillrc/commands", root);
+    snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
     
     struct stat st;
     return (stat(cmd_dir, &st) == 0 && S_ISDIR(st.st_mode));
@@ -106,7 +104,7 @@ static int has_command_directory(const char *root) {
 /* List available commands for a component */
 static int list_component_commands(const char *component, const char *root) {
     char cmd_dir[PATH_MAX];
-    snprintf(cmd_dir, sizeof(cmd_dir), "%s/.tillrc/commands", root);
+    snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
     
     DIR *dir = opendir(cmd_dir);
     if (!dir) {
@@ -196,7 +194,7 @@ static int list_all_components(void) {
     
     if (comp_count == 0) {
         printf("No components with executable commands found.\n");
-        printf("Components must have a .tillrc/commands/ directory with executable scripts.\n");
+        printf("Components must have a TILL_COMMANDS_DIR/ directory with executable scripts.\n");
     } else {
         printf("Usage: till run <component> <command> [arguments...]\n");
         printf("Example: till run tekton start\n");
@@ -288,7 +286,7 @@ static int execute_component_command(const char *component, const char *command,
     
     /* Build path to command */
     char cmd_path[PATH_MAX];
-    snprintf(cmd_path, sizeof(cmd_path), "%s/.tillrc/commands/%s", root, command);
+    snprintf(cmd_path, sizeof(cmd_path), "%s/TILL_COMMANDS_DIR/%s", root, command);
     
     /* Check if command exists and is executable */
     struct stat st;
@@ -299,7 +297,7 @@ static int execute_component_command(const char *component, const char *command,
             
             /* List available commands */
             char cmd_dir[PATH_MAX];
-            snprintf(cmd_dir, sizeof(cmd_dir), "%s/.tillrc/commands", root);
+            snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
             
             DIR *dir = opendir(cmd_dir);
             if (dir) {
@@ -317,7 +315,7 @@ static int execute_component_command(const char *component, const char *command,
                 }
                 closedir(dir);
             } else {
-                fprintf(stderr, "\nComponent '%s' has no .tillrc/commands directory.\n", 
+                fprintf(stderr, "\nComponent '%s' has no TILL_COMMANDS_DIR directory.\n", 
                         component);
             }
         } else {
@@ -397,8 +395,8 @@ static void print_run_help(void) {
     printf("Till Run - Execute Component Commands\n\n");
     printf("Usage: till run [component] [command] [arguments]\n\n");
     printf("Description:\n");
-    printf("  Execute commands defined in component .tillrc/commands/ directories.\n");
-    printf("  Each executable file in a component's .tillrc/commands/ directory\n");
+    printf("  Execute commands defined in component TILL_COMMANDS_DIR/ directories.\n");
+    printf("  Each executable file in a component's TILL_COMMANDS_DIR/ directory\n");
     printf("  becomes an available command.\n\n");
     printf("Usage patterns:\n");
     printf("  till run                         List all components with commands\n");
@@ -411,7 +409,7 @@ static void print_run_help(void) {
     printf("  till run tekton start            # Start tekton\n");
     printf("  till run tekton stop --force     # Stop tekton with arguments\n\n");
     printf("Creating commands:\n");
-    printf("  1. Create .tillrc/commands/ directory in component root\n");
+    printf("  1. Create TILL_COMMANDS_DIR/ directory in component root\n");
     printf("  2. Add executable scripts (chmod +x)\n");
     printf("  3. Scripts receive arguments and run in component directory\n\n");
     printf("Note: Commands are discovered from all Tekton installations\n");

@@ -16,6 +16,7 @@
 
 #include "till_config.h"
 #include "till_schedule.h"
+#include "till_common.h"
 #include "cJSON.h"
 
 #ifndef PATH_MAX
@@ -24,10 +25,12 @@
 
 /* Get schedule file path */
 static int get_schedule_path(char *path, size_t size) {
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return -1;
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        return -1;
+    }
     
-    snprintf(path, size, "%s/.till/schedule.json", pw->pw_dir);
+    snprintf(path, size, "%s/schedule.json", till_dir);
     return 0;
 }
 
@@ -420,9 +423,11 @@ int till_watch_install_launchd(void) {
     fprintf(fp, "        <integer>%d</integer>\n", minute);
     fprintf(fp, "    </dict>\n");
     fprintf(fp, "    <key>StandardOutPath</key>\n");
-    fprintf(fp, "    <string>%s/.till/logs/sync.log</string>\n", pw->pw_dir);
+    char till_dir[PATH_MAX];
+    get_till_dir(till_dir, sizeof(till_dir));
+    fprintf(fp, "    <string>%s/logs/sync.log</string>\n", till_dir);
     fprintf(fp, "    <key>StandardErrorPath</key>\n");
-    fprintf(fp, "    <string>%s/.till/logs/sync.error.log</string>\n", pw->pw_dir);
+    fprintf(fp, "    <string>%s/logs/sync.error.log</string>\n", till_dir);
     fprintf(fp, "</dict>\n");
     fprintf(fp, "</plist>\n");
     
@@ -495,8 +500,10 @@ int till_watch_install_systemd(void) {
     fprintf(fp, "[Service]\n");
     fprintf(fp, "Type=oneshot\n");
     fprintf(fp, "ExecStart=%s sync\n", till_path);
-    fprintf(fp, "StandardOutput=append:%s/.till/logs/sync.log\n", pw->pw_dir);
-    fprintf(fp, "StandardError=append:%s/.till/logs/sync.error.log\n", pw->pw_dir);
+    char till_dir[PATH_MAX];
+    get_till_dir(till_dir, sizeof(till_dir));
+    fprintf(fp, "StandardOutput=append:%s/logs/sync.log\n", till_dir);
+    fprintf(fp, "StandardError=append:%s/logs/sync.error.log\n", till_dir);
     
     fclose(fp);
     
@@ -557,10 +564,13 @@ int till_watch_install_cron(void) {
     }
     
     /* Create cron entry */
+    char till_dir[PATH_MAX];
+    get_till_dir(till_dir, sizeof(till_dir));
+    
     char cron_entry[PATH_MAX * 2];
     snprintf(cron_entry, sizeof(cron_entry),
-        "%d %d * * * %s sync >> %s/.till/logs/cron.log 2>&1",
-        minute, hour, till_path, pw->pw_dir);
+        "%d %d * * * %s sync >> %s/logs/cron.log 2>&1",
+        minute, hour, till_path, till_dir);
     
     /* Add to crontab */
     char cmd[PATH_MAX * 3];

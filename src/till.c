@@ -1200,10 +1200,11 @@ static int cmd_update(int argc, char *argv[]) {
     
     /* Step 8: Initialize host management if needed */
     printf("\n8. Initializing host management...\n");
-    if (till_host_init() == 0) {
+    int host_init_result = till_host_init();
+    if (host_init_result == 0) {
         printf("✓ Host management initialized\n");
-    } else {
-        printf("⚠ Host management already initialized\n");
+    } else if (host_init_result == -1) {
+        printf("⚠ Failed to initialize host management\n");
     }
     
     printf("\nNext steps:\n");
@@ -1329,8 +1330,8 @@ static int get_till_directory(char *till_dir, size_t size) {
         return -1;
     }
     
-    /* Till is installed at ~/projects/github/till */
-    snprintf(till_dir, size, "%s/projects/github/till", home);
+    /* Till is installed at projects/github/till */
+    snprintf(till_dir, size, "%s/%s/till", home, TILL_PROJECTS_BASE);
     
     /* Verify the directory exists */
     struct stat st;
@@ -1349,8 +1350,8 @@ static int get_till_parent_dir(char *parent_dir, size_t size) {
         return -1;
     }
     
-    /* Till is installed at ~/projects/github/till */
-    /* So parent directory is ~/projects/github */
+    /* Till is installed at projects/github/till */
+    /* So parent directory is projects/github */
     snprintf(parent_dir, size, "%s/projects/github", home);
     
     /* Verify the directory exists */

@@ -26,6 +26,9 @@
 #define PATH_MAX 4096
 #endif
 
+/* Forward declarations */
+static int generate_federation_key(void);
+
 /* SSH configuration template */
 static const char *SSH_CONFIG_TEMPLATE = 
     "# Till SSH Configuration - Auto-generated\n"
@@ -86,10 +89,13 @@ int till_host_init(void) {
         printf("Created Till SSH configuration at %s\n", path);
     }
     
-    /* Check for federation key */
+    /* Generate federation key if it doesn't exist */
     snprintf(path, sizeof(path), "%s/ssh/%s", till_dir, TILL_SSH_KEY_NAME);
     if (stat(path, &st) != 0) {
-        printf("No federation key found. Run 'till host init' to generate one.\n");
+        printf("Generating federation SSH key...\n");
+        if (generate_federation_key() != 0) {
+            fprintf(stderr, "Warning: Could not generate federation key\n");
+        }
     }
     
     /* Create hosts-local.json if it doesn't exist */
@@ -479,12 +485,12 @@ int till_host_add(const char *name, const char *user_at_host) {
         char install_cmd[2048];
         snprintf(install_cmd, sizeof(install_cmd),
             "ssh -F %s/ssh/config %s '"
-            "mkdir -p ~/projects/github && "
-            "cd ~/projects/github && "
+            "mkdir -p ~/%s && "
+            "cd ~/%s && "
             "git clone " TILL_REPO_URL ".git && "
             "cd till && "
             "make' 2>&1",
-            till_dir, name);
+            till_dir, name, TILL_PROJECTS_BASE, TILL_PROJECTS_BASE);
         
         printf("  Cloning and building Till...\n");
         if (system(install_cmd) != 0) {
@@ -690,16 +696,16 @@ int till_host_setup(const char *name) {
         }
     }
     
-    /* Bootstrap script already handles installation to ~/.local/bin */
-    printf("Till binary installed to ~/.local/bin/till\n");
+    /* Bootstrap script already handles installation to binary path */
+    printf("Till binary installed to ~/%s\n", TILL_REMOTE_BINARY_PATH);
     
     /* Verify installation - check multiple locations */
     snprintf(cmd, sizeof(cmd),
         "ssh -F %s/ssh/config %s "
-        "'~/.local/bin/till --version 2>/dev/null || "
-        TILL_REMOTE_INSTALL_PATH "/till --version 2>/dev/null || "
-        "~/.till/till/till --version 2>/dev/null'",
-        till_dir, name);
+        "'~/%s --version 2>/dev/null || "
+        "~/" TILL_REMOTE_INSTALL_PATH "/till --version 2>/dev/null || "
+        "till --version 2>/dev/null'",  /* NO ~/.till anymore */
+        till_dir, name, TILL_REMOTE_BINARY_PATH);
     
     printf("Verifying Till installation...\n");
     if (system(cmd) == 0) {
@@ -957,7 +963,7 @@ int till_host_remove(const char *name, int clean_remote) {
         printf("Cleaning up remote Till installation on '%s'...\n", name);
         char cmd[1024];
         snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/ssh/config %s 'rm -rf " TILL_REMOTE_INSTALL_PATH " " TILL_REMOTE_TILL_DIR "'",
+            "ssh -F %s/ssh/config %s 'rm -rf ~/" TILL_REMOTE_INSTALL_PATH "'",
             till_dir, name);
         
         if (system(cmd) != 0) {
