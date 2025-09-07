@@ -489,7 +489,8 @@ int till_host_add(const char *name, const char *user_at_host) {
             "cd ~/%s && "
             "git clone " TILL_REPO_URL ".git && "
             "cd till && "
-            "make' 2>&1",
+            "make && "
+            "./till update' 2>&1",
             till_dir, name, TILL_PROJECTS_BASE, TILL_PROJECTS_BASE);
         
         printf("  Cloning and building Till...\n");
@@ -499,7 +500,7 @@ int till_host_add(const char *name, const char *user_at_host) {
             cJSON_Delete(json);
             return -1;
         }
-        printf("✓ Till installed successfully\n");
+        printf("✓ Till installed and initialized successfully\n");
     }
     
     /* Step 6: Verify Till works on remote */
@@ -648,56 +649,34 @@ int till_host_setup(const char *name) {
     
     char cmd[4096];
     
-    /* Check if bootstrap script exists locally */
+    /* Use git clone approach - NO bootstrap script */
+    printf("Installing Till on remote host from GitHub...\n");
     
-    /* Try to find bootstrap script */
-    const char *paths[] = {
-        "./scripts/bootstrap.sh",
-        "../till/scripts/bootstrap.sh",
-        "/usr/local/share/till/scripts/bootstrap.sh",
-        NULL
-    };
+    /* Clone, build, and run till update */
+    snprintf(cmd, sizeof(cmd),
+        "ssh -F %s/ssh/config %s '"
+        "mkdir -p ~/%s && "
+        "cd ~/%s && "
+        "if [ -d till ]; then "
+        "  cd till && git pull && make && ./till update; "
+        "else "
+        "  git clone " TILL_REPO_URL ".git && "
+        "  cd till && make && ./till update; "
+        "fi' 2>&1",
+        till_dir, name, TILL_PROJECTS_BASE, TILL_PROJECTS_BASE);
     
-    const char *found_path = NULL;
-    for (int i = 0; paths[i] != NULL; i++) {
-        if (access(paths[i], R_OK) == 0) {
-            found_path = paths[i];
-            break;
-        }
+    printf("  Cloning from GitHub, building, and initializing...\n");
+    if (system(cmd) != 0) {
+        fprintf(stderr, "Error: Failed to install Till\n");
+        fprintf(stderr, "Check remote host for:\n");
+        fprintf(stderr, "  - git installed\n");
+        fprintf(stderr, "  - make installed\n");
+        fprintf(stderr, "  - C compiler (gcc/clang) installed\n");
+        fprintf(stderr, "  - Internet connectivity to GitHub\n");
+        return -1;
     }
     
-    /* If we have local bootstrap script, use it */
-    if (found_path) {
-        printf("Installing Till on remote host using bootstrap script...\n");
-        
-        /* Send and execute bootstrap script */
-        snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/ssh/config %s 'bash -s' < %s",
-            till_dir, name, found_path);
-        
-        if (system(cmd) != 0) {
-            fprintf(stderr, "Error: Bootstrap script failed\n");
-            fprintf(stderr, "Check remote host for missing dependencies\n");
-            return -1;
-        }
-    } else {
-        /* Fallback to downloading bootstrap script from GitHub */
-        printf("Downloading and running Till bootstrap script...\n");
-        
-        snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/ssh/config %s "
-            "'curl -sSL https://raw.githubusercontent.com/ckoons/till/main/scripts/bootstrap.sh | bash'",
-            till_dir, name);
-        
-        if (system(cmd) != 0) {
-            fprintf(stderr, "Error: Failed to run bootstrap script\n");
-            fprintf(stderr, "Please check internet connectivity and try again\n");
-            return -1;
-        }
-    }
-    
-    /* Bootstrap script already handles installation to binary path */
-    printf("Till binary installed to ~/%s\n", TILL_REMOTE_BINARY_PATH);
+    printf("✓ Till installed to ~/%s/till\n", TILL_PROJECTS_BASE);
     
     /* Verify installation - check multiple locations */
     snprintf(cmd, sizeof(cmd),
