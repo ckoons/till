@@ -39,7 +39,6 @@
   Solo Mode
 
   # Initialize your field
-  till init
 
   # Deploy everything
   till deploy
@@ -50,7 +49,6 @@
   Federation Mode
 
   # Join the federation
-  till init --federation
 
   # Pull shared seeds
   till pull

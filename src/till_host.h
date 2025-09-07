@@ -5,9 +5,6 @@
 #ifndef TILL_HOST_H
 #define TILL_HOST_H
 
-/* Initialize Till SSH environment */
-int till_host_init(void);
-
 /* Add a new host */
 int till_host_add(const char *name, const char *user_at_host);
 

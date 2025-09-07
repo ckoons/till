@@ -18,7 +18,8 @@
 #define TILL_GITHUB_REPO "till"
 
 /* Default URLs */
-#define TILL_REPO_URL TILL_GITHUB_BASE "/" TILL_GITHUB_USER "/" TILL_GITHUB_REPO
+#define TILL_REPO_URL "https://github.com/" TILL_GITHUB_USER "/" TILL_GITHUB_REPO
+#define TILL_REPO_GIT_URL "git@github.com:" TILL_GITHUB_USER "/" TILL_GITHUB_REPO ".git"
 #define TEKTON_REPO_URL TILL_GITHUB_BASE "/" TILL_GITHUB_USER "/Tekton"
 
 /* Local Paths */
@@ -48,10 +49,7 @@
 #define DEFAULT_AI_PORT_BASE 45000
 #define PORT_RANGE_SIZE 100
 
-/* SSH Key Configuration */
-#define TILL_SSH_KEY_NAME "federation_ed25519"
-#define TILL_SSH_KEY_COMMENT "federation@%s"
-#define TILL_SSH_KEY_TYPE "ed25519"
+/* SSH Key Configuration - DEPRECATED, using user's SSH keys now */
 
 /* Remote Installation Paths - NO HOME DIRECTORY REFERENCES */
 #define TILL_REMOTE_INSTALL_PATH "projects/github/till"  /* Relative to user home */

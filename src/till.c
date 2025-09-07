@@ -59,17 +59,6 @@ typedef enum {
     CMD_UPDATE
 } command_t;
 
-typedef enum {
-    SUBCMD_NONE,
-    SUBCMD_ADD,
-    SUBCMD_REMOVE,
-    SUBCMD_LIST,
-    SUBCMD_INIT,
-    SUBCMD_LEAVE,
-    SUBCMD_CHECK,
-    SUBCMD_APPLY
-} subcommand_t;
-
 /* Function prototypes */
 static void print_usage(const char *program);
 static void print_version(void);
@@ -78,7 +67,6 @@ static void print_version(void);
 extern int suggest_next_port_range(int *main_port, int *ai_port);
 extern int get_primary_tekton_path(char *path, size_t size);
 static command_t parse_command(const char *cmd);
-/* static subcommand_t parse_subcommand(const char *subcmd); */ /* Currently unused */
 static int cmd_help(int argc, char *argv[]);
 static int cmd_sync(int argc, char *argv[]);
 static int cmd_watch(int argc, char *argv[]);
@@ -235,7 +223,6 @@ static void print_usage(const char *program) {
     printf("  hold <component>    Prevent component updates\n");
     printf("  release <component> Allow component updates\n");
     printf("  run <component> <cmd> [args]  Run component command\n");
-    printf("  host init           Initialize SSH environment\n");
     printf("  host add <name> <user>@<host>  Add remote host\n");
     printf("  host test <name>    Test host connectivity\n");
     printf("  host setup <name>   Install Till on remote host\n");
@@ -244,9 +231,6 @@ static void print_usage(const char *program) {
     printf("  host sync [name]    Sync from remote host(s)\n");
     printf("  host status [name]  Show host status\n");
     printf("  host remove <name>  Remove host from configuration\n");
-    printf("  federate init       Initialize federation\n");
-    printf("  federate leave      Leave federation\n");
-    printf("  federate status     Show federation status\n");
     printf("  status              Show Till status\n");
     printf("  update              Update Till from git repository\n");
     printf("\nExamples:\n");
@@ -254,7 +238,6 @@ static void print_usage(const char *program) {
     printf("  till sync                 # Synchronize now\n");
     printf("  till install              # Install Tekton\n");
     printf("  till install --mode solo  # Solo installation\n");
-    printf("  till federate init --mode observer --name kant.philosophy.us\n");
     printf("  till host add laptop casey@192.168.1.100\n");
     printf("\nFor detailed help on a command, use:\n");
     printf("  till help <command>     # Show help for specific command\n");
@@ -289,20 +272,6 @@ static command_t parse_command(const char *cmd) {
     return CMD_NONE;
 }
 
-/* Parse subcommand string - Currently unused but may be useful later */
-#if 0
-static subcommand_t parse_subcommand(const char *subcmd) {
-    if (!subcmd) return SUBCMD_NONE;
-    if (strcmp(subcmd, "add") == 0) return SUBCMD_ADD;
-    if (strcmp(subcmd, "remove") == 0) return SUBCMD_REMOVE;
-    if (strcmp(subcmd, "list") == 0) return SUBCMD_LIST;
-    if (strcmp(subcmd, "init") == 0) return SUBCMD_INIT;
-    if (strcmp(subcmd, "leave") == 0) return SUBCMD_LEAVE;
-    if (strcmp(subcmd, "check") == 0) return SUBCMD_CHECK;
-    if (strcmp(subcmd, "apply") == 0) return SUBCMD_APPLY;
-    return SUBCMD_NONE;
-}
-#endif
 
 /* Dry run - show what sync would do */
 static int dry_run(void) {
@@ -979,52 +948,17 @@ static int cmd_release(int argc, char *argv[]) {
 
 /* Command: host */
 static int cmd_host(int argc, char *argv[]) {
-    /* Initialize Till SSH environment on first use */
-    till_host_init();
-    
     /* Delegate to host management module */
     return till_host_command(argc, argv);
 }
 
 /* Command: federate */
 static int cmd_federate(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Error: Subcommand required (init, leave, status)\n");
-        return EXIT_USAGE_ERROR;
-    }
+    (void)argc;
+    (void)argv;
     
-    if (strcmp(argv[1], "init") == 0) {
-        const char *mode = MODE_OBSERVER;
-        const char *name = NULL;
-        
-        /* Parse options */
-        for (int i = 2; i < argc; i++) {
-            if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
-                mode = argv[++i];
-            } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
-                name = argv[++i];
-            }
-        }
-        
-        printf("Initializing federation...\n");
-        printf("Mode: %s\n", mode);
-        if (name) {
-            printf("Name: %s\n", name);
-        }
-        /* TODO: Implement federate init */
-        
-    } else if (strcmp(argv[1], "leave") == 0) {
-        printf("Leaving federation...\n");
-        /* TODO: Implement federate leave */
-        
-    } else if (strcmp(argv[1], "status") == 0) {
-        printf("Federation status:\n");
-        /* TODO: Implement federate status */
-        
-    } else {
-        fprintf(stderr, "Error: Unknown subcommand '%s'\n", argv[1]);
-        return EXIT_USAGE_ERROR;
-    }
+    printf("Federation features are not yet implemented.\n");
+    printf("This will allow multiple Till instances to coordinate in the future.\n");
     
     return EXIT_SUCCESS;
 }
@@ -1197,15 +1131,6 @@ static int cmd_update(int argc, char *argv[]) {
     system(version_cmd);
     
     printf("\n✅ Till update complete!\n");
-    
-    /* Step 8: Initialize host management if needed */
-    printf("\n8. Initializing host management...\n");
-    int host_init_result = till_host_init();
-    if (host_init_result == 0) {
-        printf("✓ Host management initialized\n");
-    } else if (host_init_result == -1) {
-        printf("⚠ Failed to initialize host management\n");
-    }
     
     printf("\nNext steps:\n");
     printf("  - Restart your shell or run: hash -r\n");
