@@ -37,35 +37,41 @@ static const char *SSH_CONFIG_TEMPLATE =
 /* Initialize Till SSH environment */
 int till_host_init(void) {
     char path[PATH_MAX];
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) {
-        fprintf(stderr, "Error: Cannot determine home directory\n");
-        return -1;
+    char till_dir[PATH_MAX];
+    
+    /* Get Till directory - create in project if doesn't exist */
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        /* Create .till in current directory (should be till project) */
+        if (getcwd(till_dir, sizeof(till_dir)) == NULL) {
+            fprintf(stderr, "Error: Cannot get current directory\n");
+            return -1;
+        }
+        strncat(till_dir, "/.till", sizeof(till_dir) - strlen(till_dir) - 1);
     }
     
-    /* Create ~/.till directory */
-    snprintf(path, sizeof(path), "%s/.till", pw->pw_dir);
+    /* Create .till directory */
+    snprintf(path, sizeof(path), "%s", till_dir);
     if (mkdir(path, 0700) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: Cannot create %s: %s\n", path, strerror(errno));
         return -1;
     }
     
-    /* Create ~/.till/ssh directory */
-    snprintf(path, sizeof(path), "%s/.till/ssh", pw->pw_dir);
+    /* Create .till/ssh directory */
+    snprintf(path, sizeof(path), "%s/ssh", till_dir);
     if (mkdir(path, 0700) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: Cannot create %s: %s\n", path, strerror(errno));
         return -1;
     }
     
-    /* Create ~/.till/ssh/control directory for SSH multiplexing */
-    snprintf(path, sizeof(path), "%s/.till/ssh/control", pw->pw_dir);
+    /* Create .till/ssh/control directory for SSH multiplexing */
+    snprintf(path, sizeof(path), "%s/ssh/control", till_dir);
     if (mkdir(path, 0700) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: Cannot create %s: %s\n", path, strerror(errno));
         return -1;
     }
     
     /* Create/check SSH config */
-    snprintf(path, sizeof(path), "%s/.till/ssh/config", pw->pw_dir);
+    snprintf(path, sizeof(path), "%s/ssh/config", till_dir);
     struct stat st;
     if (stat(path, &st) != 0) {
         /* Create initial config */
@@ -81,13 +87,13 @@ int till_host_init(void) {
     }
     
     /* Check for federation key */
-    snprintf(path, sizeof(path), "%s/.till/ssh/%s", pw->pw_dir, TILL_SSH_KEY_NAME);
+    snprintf(path, sizeof(path), "%s/ssh/%s", till_dir, TILL_SSH_KEY_NAME);
     if (stat(path, &st) != 0) {
         printf("No federation key found. Run 'till host init' to generate one.\n");
     }
     
     /* Create hosts-local.json if it doesn't exist */
-    snprintf(path, sizeof(path), "%s/.till/hosts-local.json", pw->pw_dir);
+    snprintf(path, sizeof(path), "%s/hosts-local.json", till_dir);
     if (stat(path, &st) != 0) {
         FILE *fp = fopen(path, "w");
         if (fp) {
@@ -102,10 +108,11 @@ int till_host_init(void) {
 /* Generate federation SSH key */
 static int generate_federation_key(void) {
     char path[PATH_MAX];
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return -1;
+    // Till dir check
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) return -1;
     
-    snprintf(path, sizeof(path), "%s/.till/ssh/%s", pw->pw_dir, TILL_SSH_KEY_NAME);
+    snprintf(path, sizeof(path), "%s/ssh/%s", till_dir, TILL_SSH_KEY_NAME);
     
     /* Check if key already exists */
     struct stat st;
@@ -116,11 +123,14 @@ static int generate_federation_key(void) {
     }
     
     /* Generate new key */
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    
     char cmd[PATH_MAX + 256];
     snprintf(cmd, sizeof(cmd), 
         "ssh-keygen -t %s -f %s -N '' -C '" TILL_SSH_KEY_COMMENT "' 2>/dev/null",
         TILL_SSH_KEY_TYPE,
-        path, pw->pw_name);
+        path, hostname);
     
     printf("Generating federation SSH key...\n");
     if (system(cmd) != 0) {
@@ -151,10 +161,11 @@ static int generate_federation_key(void) {
 /* Load hosts from JSON file */
 static cJSON *load_hosts(void) {
     char path[PATH_MAX];
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return NULL;
+    // Till dir check
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) return NULL;
     
-    snprintf(path, sizeof(path), "%s/.till/hosts-local.json", pw->pw_dir);
+    snprintf(path, sizeof(path), "%s/hosts-local.json", till_dir);
     
     FILE *fp = fopen(path, "r");
     if (!fp) return NULL;
@@ -182,10 +193,11 @@ static cJSON *load_hosts(void) {
 /* Save hosts to JSON file */
 static int save_hosts(cJSON *json) {
     char path[PATH_MAX];
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return -1;
+    // Till dir check
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) return -1;
     
-    snprintf(path, sizeof(path), "%s/.till/hosts-local.json", pw->pw_dir);
+    snprintf(path, sizeof(path), "%s/hosts-local.json", till_dir);
     
     /* Update timestamp */
     cJSON *updated = cJSON_GetObjectItem(json, "updated");
@@ -243,9 +255,9 @@ static int add_ssh_config_entry(const char *name, const char *user, const char *
     fprintf(fp, "    IdentityFile %s/ssh/%s\n", till_dir, TILL_SSH_KEY_NAME);
     fprintf(fp, "    IdentitiesOnly yes\n");
     fprintf(fp, "    StrictHostKeyChecking accept-new\n");
-    fprintf(fp, "    UserKnownHostsFile ~/.till/ssh/known_hosts\n");
+    fprintf(fp, "    UserKnownHostsFile %s/ssh/known_hosts\n", till_dir);
     fprintf(fp, "    ControlMaster auto\n");
-    fprintf(fp, "    ControlPath ~/.till/ssh/control/%%h-%%p-%%r\n");
+    fprintf(fp, "    ControlPath %s/ssh/control/%%h-%%p-%%r\n", till_dir);
     fprintf(fp, "    ControlPersist 10m\n\n");
     
     fclose(fp);
@@ -521,6 +533,12 @@ int till_host_test(const char *name) {
         return -1;
     }
     
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        return -1;
+    }
+    
     /* Load hosts */
     cJSON *json = load_hosts();
     if (!json) {
@@ -539,10 +557,9 @@ int till_host_test(const char *name) {
     
     /* Test SSH connection */
     char cmd[1024];
-    struct passwd *pw = getpwuid(getuid());
     snprintf(cmd, sizeof(cmd), 
-        "ssh -F %s/.till/ssh/config -o ConnectTimeout=5 %s 'echo TILL_TEST_SUCCESS'",
-        pw->pw_dir, name);
+        "ssh -F %s/ssh/config -o ConnectTimeout=5 %s 'echo TILL_TEST_SUCCESS'",
+        till_dir, name);
     
     printf("Testing connection to '%s'...\n", name);
     
@@ -574,8 +591,8 @@ int till_host_test(const char *name) {
         
         /* Test Till installation */
         snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/.till/ssh/config %s 'which till 2>/dev/null'",
-            pw->pw_dir, name);
+            "ssh -F %s/ssh/config %s 'which till 2>/dev/null'",
+            till_dir, name);
         
         fp = popen(cmd, "r");
         if (fp) {
@@ -611,6 +628,12 @@ int till_host_setup(const char *name) {
         return -1;
     }
     
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        return -1;
+    }
+    
     /* First test connection */
     if (till_host_test(name) != 0) {
         fprintf(stderr, "Error: Cannot connect to host '%s'\n", name);
@@ -618,7 +641,6 @@ int till_host_setup(const char *name) {
     }
     
     char cmd[4096];
-    struct passwd *pw = getpwuid(getuid());
     
     /* Check if bootstrap script exists locally */
     
@@ -644,8 +666,8 @@ int till_host_setup(const char *name) {
         
         /* Send and execute bootstrap script */
         snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/.till/ssh/config %s 'bash -s' < %s",
-            pw->pw_dir, name, found_path);
+            "ssh -F %s/ssh/config %s 'bash -s' < %s",
+            till_dir, name, found_path);
         
         if (system(cmd) != 0) {
             fprintf(stderr, "Error: Bootstrap script failed\n");
@@ -657,9 +679,9 @@ int till_host_setup(const char *name) {
         printf("Downloading and running Till bootstrap script...\n");
         
         snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/.till/ssh/config %s "
+            "ssh -F %s/ssh/config %s "
             "'curl -sSL https://raw.githubusercontent.com/ckoons/till/main/scripts/bootstrap.sh | bash'",
-            pw->pw_dir, name);
+            till_dir, name);
         
         if (system(cmd) != 0) {
             fprintf(stderr, "Error: Failed to run bootstrap script\n");
@@ -673,11 +695,11 @@ int till_host_setup(const char *name) {
     
     /* Verify installation - check multiple locations */
     snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config %s "
+        "ssh -F %s/ssh/config %s "
         "'~/.local/bin/till --version 2>/dev/null || "
         TILL_REMOTE_INSTALL_PATH "/till --version 2>/dev/null || "
         "~/.till/till/till --version 2>/dev/null'",
-        pw->pw_dir, name);
+        till_dir, name);
     
     printf("Verifying Till installation...\n");
     if (system(cmd) == 0) {
@@ -717,6 +739,12 @@ int till_host_exec(const char *name, const char *command) {
         return -1;
     }
     
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        return -1;
+    }
+    
     /* Check if host exists */
     cJSON *json = load_hosts();
     if (!json) {
@@ -738,13 +766,12 @@ int till_host_exec(const char *name, const char *command) {
     
     /* Build SSH command */
     char cmd[4096];
-    struct passwd *pw = getpwuid(getuid());
     
     /* Try to use till from PATH first, then fallback to known locations */
     snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config %s "
+        "ssh -F %s/ssh/config %s "
         "'export PATH=\"$HOME/.local/bin:$PATH\"; %s'",
-        pw->pw_dir, name, command);
+        till_dir, name, command);
     
     printf("Executing on '%s': %s\n", name, command);
     
@@ -793,8 +820,7 @@ int till_host_ssh(const char *name, int argc, char *argv[]) {
     char till_dir[PATH_MAX];
     if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
         /* Fallback to old method if new one fails */
-        struct passwd *pw = getpwuid(getuid());
-        snprintf(till_dir, sizeof(till_dir), "%s/.till", pw->pw_dir);
+        snprintf(till_dir, sizeof(till_dir), "%s/.till", till_dir);
     }
     
     /* Prepare SSH arguments */
@@ -838,6 +864,12 @@ int till_host_ssh(const char *name, int argc, char *argv[]) {
 
 /* Sync from remote host */
 int till_host_sync(const char *name) {
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
+        fprintf(stderr, "Error: Cannot find Till directory\n");
+        return -1;
+    }
+    
     if (!name) {
         /* Sync all hosts */
         cJSON *json = load_hosts();
@@ -865,14 +897,13 @@ int till_host_sync(const char *name) {
     
     /* Sync specific host */
     char cmd[1024];
-    struct passwd *pw = getpwuid(getuid());
     
     printf("Syncing from '%s'...\n", name);
     
     /* Pull updates on remote */
     snprintf(cmd, sizeof(cmd),
-        "ssh -F %s/.till/ssh/config %s 'till sync'",
-        pw->pw_dir, name);
+        "ssh -F %s/ssh/config %s 'till sync'",
+        till_dir, name);
     
     if (system(cmd) != 0) {
         fprintf(stderr, "Warning: Remote sync failed\n");
@@ -888,8 +919,9 @@ int till_host_remove(const char *name, int clean_remote) {
         return -1;
     }
     
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw) return -1;
+    // Till dir check
+    char till_dir[PATH_MAX];
+    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) return -1;
     
     /* Load existing hosts */
     cJSON *json = load_hosts();
@@ -925,8 +957,8 @@ int till_host_remove(const char *name, int clean_remote) {
         printf("Cleaning up remote Till installation on '%s'...\n", name);
         char cmd[1024];
         snprintf(cmd, sizeof(cmd),
-            "ssh -F %s/.till/ssh/config %s 'rm -rf " TILL_REMOTE_INSTALL_PATH " " TILL_REMOTE_TILL_DIR "'",
-            pw->pw_dir, name);
+            "ssh -F %s/ssh/config %s 'rm -rf " TILL_REMOTE_INSTALL_PATH " " TILL_REMOTE_TILL_DIR "'",
+            till_dir, name);
         
         if (system(cmd) != 0) {
             fprintf(stderr, "Warning: Failed to clean remote installation\n");
@@ -951,7 +983,7 @@ int till_host_remove(const char *name, int clean_remote) {
     printf("Removing SSH configuration for '%s'...\n", name);
     char ssh_config[PATH_MAX];
     char ssh_config_tmp[PATH_MAX];
-    snprintf(ssh_config, sizeof(ssh_config), "%s/.till/ssh/config", pw->pw_dir);
+    snprintf(ssh_config, sizeof(ssh_config), "%s/ssh/config", till_dir);
     snprintf(ssh_config_tmp, sizeof(ssh_config_tmp), "%s.tmp", ssh_config);
     
     FILE *fp_in = fopen(ssh_config, "r");
@@ -1025,7 +1057,7 @@ int till_host_remove(const char *name, int clean_remote) {
     printf("Cleaning up SSH control sockets...\n");
     char control_path[PATH_MAX];
     snprintf(control_path, sizeof(control_path), 
-        "%s/.till/ssh/control/%s-*", pw->pw_dir, name);
+        "%s/ssh/control/%s-*", till_dir, name);
     
     char cmd[PATH_MAX + 10];
     snprintf(cmd, sizeof(cmd), "rm -f %s 2>/dev/null", control_path);
@@ -1035,7 +1067,7 @@ int till_host_remove(const char *name, int clean_remote) {
     printf("Cleaning up known_hosts entry...\n");
     char known_hosts[PATH_MAX];
     char known_hosts_tmp[PATH_MAX];
-    snprintf(known_hosts, sizeof(known_hosts), "%s/.till/ssh/known_hosts", pw->pw_dir);
+    snprintf(known_hosts, sizeof(known_hosts), "%s/ssh/known_hosts", till_dir);
     snprintf(known_hosts_tmp, sizeof(known_hosts_tmp), "%s.tmp", known_hosts);
     
     if (saved_hostname) {
@@ -1152,9 +1184,9 @@ static void print_host_help(void) {
     printf("  till host remove m2                     # Remove host (keep remote)\n");
     printf("  till host remove m2 --clean-remote      # Remove and clean remote\n");
     printf("\nSSH Configuration:\n");
-    printf("  SSH config: ~/.till/ssh/config\n");
-    printf("  SSH keys:   %s/ssh/%s\n", TILL_REMOTE_TILL_DIR, TILL_SSH_KEY_NAME);
-    printf("  Hosts file: ~/.till/hosts-local.json\n");
+    printf("  SSH config: .till/ssh/config\n");
+    printf("  SSH keys:   .till/ssh/%s\n", TILL_SSH_KEY_NAME);
+    printf("  Hosts file: .till/hosts-local.json\n");
 }
 
 /* Main host command handler */
