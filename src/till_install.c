@@ -1178,7 +1178,7 @@ int register_installation(install_options_t *opts) {
     
     if (!root) {
         root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "format", "till-private-v1");
+        cJSON_AddStringToObject(root, "format", TILL_PRIVATE_FORMAT);
         cJSON_AddStringToObject(root, "version", "1.0.0");
     }
     

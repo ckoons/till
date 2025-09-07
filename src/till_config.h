@@ -48,6 +48,23 @@
 #define DEFAULT_AI_PORT_BASE 45000
 #define PORT_RANGE_SIZE 100
 
+/* SSH Key Configuration */
+#define TILL_SSH_KEY_NAME "federation_ed25519"
+#define TILL_SSH_KEY_COMMENT "federation@%s"
+#define TILL_SSH_KEY_TYPE "ed25519"
+
+/* Remote Installation Paths */
+#define TILL_REMOTE_INSTALL_PATH "~/projects/github/till"
+#define TILL_REMOTE_TILL_DIR "~/.till"
+
+/* Status Values */
+#define TILL_STATUS_READY "ready"
+#define TILL_STATUS_PENDING "pending"
+#define TILL_STATUS_ERROR "error"
+
+/* Private Config Format */
+#define TILL_PRIVATE_FORMAT "private-v1"
+
 /* Branch TTL Values (in hours) */
 #define TTL_PUBLIC_FACE 72      /* 3 days */
 #define TTL_COMPONENT 24        /* 1 day */
