@@ -25,87 +25,47 @@
 
 /* Get schedule file path */
 static int get_schedule_path(char *path, size_t size) {
-    char till_dir[PATH_MAX];
-    if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
-        return -1;
-    }
-    
-    snprintf(path, size, "%s/schedule.json", till_dir);
-    return 0;
+    return build_till_path(path, size, "schedule.json");
 }
 
 /* Load schedule configuration */
 static cJSON *load_schedule(void) {
-    char path[PATH_MAX];
-    if (get_schedule_path(path, sizeof(path)) != 0) return NULL;
-    
-    FILE *fp = fopen(path, "r");
-    if (!fp) {
-        /* Create default schedule */
-        cJSON *schedule = cJSON_CreateObject();
-        
-        cJSON *sync = cJSON_CreateObject();
-        cJSON_AddBoolToObject(sync, "enabled", cJSON_False);
-        cJSON_AddNumberToObject(sync, "interval_hours", 24);
-        cJSON_AddStringToObject(sync, "daily_at", "03:00");
-        cJSON_AddNullToObject(sync, "next_run");
-        cJSON_AddNullToObject(sync, "last_run");
-        cJSON_AddStringToObject(sync, "last_status", "none");
-        cJSON_AddNumberToObject(sync, "consecutive_failures", 0);
-        cJSON_AddArrayToObject(sync, "history");
-        
-        cJSON_AddItemToObject(schedule, "sync", sync);
-        
-        cJSON *watch = cJSON_CreateObject();
-        cJSON_AddBoolToObject(watch, "enabled", cJSON_False);
-        cJSON_AddNullToObject(watch, "pid");
-        cJSON_AddNullToObject(watch, "started");
-        cJSON_AddNullToObject(watch, "daemon_type");
-        
-        cJSON_AddItemToObject(schedule, "watch", watch);
-        
+    /* Try to load existing schedule */
+    cJSON *schedule = load_till_json("schedule.json");
+    if (schedule) {
         return schedule;
     }
     
-    fseek(fp, 0, SEEK_END);
-    long size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+    /* Create default schedule */
+    till_log(LOG_INFO, "Creating default schedule configuration");
+    schedule = cJSON_CreateObject();
     
-    char *content = malloc(size + 1);
-    if (!content) {
-        fclose(fp);
-        return NULL;
-    }
+    cJSON *sync = cJSON_CreateObject();
+    cJSON_AddBoolToObject(sync, "enabled", cJSON_False);
+    cJSON_AddNumberToObject(sync, "interval_hours", 24);
+    cJSON_AddStringToObject(sync, "daily_at", "03:00");
+    cJSON_AddNullToObject(sync, "next_run");
+    cJSON_AddNullToObject(sync, "last_run");
+    cJSON_AddStringToObject(sync, "last_status", "none");
+    cJSON_AddNumberToObject(sync, "consecutive_failures", 0);
+    cJSON_AddArrayToObject(sync, "history");
     
-    fread(content, 1, size, fp);
-    content[size] = '\0';
-    fclose(fp);
+    cJSON_AddItemToObject(schedule, "sync", sync);
     
-    cJSON *schedule = cJSON_Parse(content);
-    free(content);
+    cJSON *watch = cJSON_CreateObject();
+    cJSON_AddBoolToObject(watch, "enabled", cJSON_False);
+    cJSON_AddNullToObject(watch, "pid");
+    cJSON_AddNullToObject(watch, "started");
+    cJSON_AddNullToObject(watch, "daemon_type");
+    
+    cJSON_AddItemToObject(schedule, "watch", watch);
     
     return schedule;
 }
 
 /* Save schedule configuration */
 static int save_schedule(cJSON *schedule) {
-    char path[PATH_MAX];
-    if (get_schedule_path(path, sizeof(path)) != 0) return -1;
-    
-    char *output = cJSON_Print(schedule);
-    if (!output) return -1;
-    
-    FILE *fp = fopen(path, "w");
-    if (!fp) {
-        free(output);
-        return -1;
-    }
-    
-    fprintf(fp, "%s", output);
-    fclose(fp);
-    free(output);
-    
-    return 0;
+    return save_till_json("schedule.json", schedule);
 }
 
 /* Parse time in HH:MM format */

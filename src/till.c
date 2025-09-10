@@ -19,6 +19,7 @@
 
 #include "till_config.h"
 #include "till_install.h"
+#include "till_registry.h"
 #include "till_host.h"
 #include "till_schedule.h"
 #include "till_run.h"
@@ -42,31 +43,22 @@ typedef enum {
     LOG_ERROR
 } log_level_t;
 
+/* Command handler function type */
+typedef int (*command_handler_t)(int argc, char *argv[]);
+
 /* Command structure */
-typedef enum {
-    CMD_NONE,
-    CMD_HELP,
-    CMD_SYNC,
-    CMD_WATCH,
-    CMD_INSTALL,
-    CMD_UNINSTALL,
-    CMD_HOLD,
-    CMD_RELEASE,
-    CMD_HOST,
-    CMD_FEDERATE,
-    CMD_STATUS,
-    CMD_RUN,
-    CMD_UPDATE
-} command_t;
+typedef struct {
+    const char *name;
+    command_handler_t handler;
+    const char *description;
+    int pass_full_argc;  /* 0 = pass argc-1, argv+1; 1 = pass full argc, argv */
+} command_def_t;
 
 /* Function prototypes */
 static void print_usage(const char *program);
 static void print_version(void);
 
-/* External functions from till_install.c */
-extern int suggest_next_port_range(int *main_port, int *ai_port);
-extern int get_primary_tekton_path(char *path, size_t size);
-static command_t parse_command(const char *cmd);
+/* Command handlers */
 static int cmd_help(int argc, char *argv[]);
 static int cmd_sync(int argc, char *argv[]);
 static int cmd_watch(int argc, char *argv[]);
@@ -79,6 +71,23 @@ static int cmd_federate(int argc, char *argv[]);
 static int cmd_status(int argc, char *argv[]);
 static int cmd_run(int argc, char *argv[]);
 static int cmd_update(int argc, char *argv[]);
+
+/* Command table */
+static const command_def_t commands[] = {
+    {"sync",      cmd_sync,      "Pull updates for all Tekton installations", 0},
+    {"watch",     cmd_watch,     "Set watch daemon frequency", 0},
+    {"install",   cmd_install,   "Install Tekton or components", 0},
+    {"uninstall", cmd_uninstall, "Uninstall component", 0},
+    {"hold",      cmd_hold,      "Prevent component updates", 0},
+    {"release",   cmd_release,   "Allow component updates", 0},
+    {"host",      cmd_host,      "Manage remote hosts", 0},
+    {"federate",  cmd_federate,  "Manage federation", 0},
+    {"status",    cmd_status,    "Show Till status", 0},
+    {"run",       cmd_run,       "Run component command", 1},  /* Special case: needs argc-2, argv+2 */
+    {"update",    cmd_update,    "Update Till from git", 0},
+    {"help",      cmd_help,      "Show help information", 0},
+    {NULL, NULL, NULL, 0}
+};
 static int dry_run(void);
 static int ensure_directories(void);
 static int ensure_discovery(void);
@@ -151,53 +160,31 @@ int main(int argc, char *argv[]) {
         return result;
     }
     
-    /* Parse and execute command */
-    command_t cmd = parse_command(argv[1]);
-    int result = 0;
+    /* Find and execute command */
+    const command_def_t *cmd = NULL;
+    for (int i = 0; commands[i].name != NULL; i++) {
+        if (strcmp(argv[1], commands[i].name) == 0) {
+            cmd = &commands[i];
+            break;
+        }
+    }
     
-    switch (cmd) {
-        case CMD_SYNC:
-            result = cmd_sync(argc - 1, argv + 1);
-            break;
-        case CMD_WATCH:
-            result = cmd_watch(argc - 1, argv + 1);
-            break;
-        case CMD_INSTALL:
-            result = cmd_install(argc - 1, argv + 1);
-            break;
-        case CMD_UNINSTALL:
-            result = cmd_uninstall(argc - 1, argv + 1);
-            break;
-        case CMD_HOLD:
-            result = cmd_hold(argc - 1, argv + 1);
-            break;
-        case CMD_RELEASE:
-            result = cmd_release(argc - 1, argv + 1);
-            break;
-        case CMD_HOST:
-            result = cmd_host(argc - 1, argv + 1);
-            break;
-        case CMD_FEDERATE:
-            result = cmd_federate(argc - 1, argv + 1);
-            break;
-        case CMD_STATUS:
-            result = cmd_status(argc - 1, argv + 1);
-            break;
-        case CMD_RUN:
-            result = cmd_run(argc - 2, argv + 2);
-            break;
-        case CMD_UPDATE:
-            result = cmd_update(argc - 1, argv + 1);
-            break;
-        case CMD_HELP:
-            result = cmd_help(argc - 1, argv + 1);
-            break;
-        default:
-            fprintf(stderr, "Error: Unknown command '%s'\n", argv[1]);
-            fprintf(stderr, "Try 'till --help' for usage information\n");
-            till_log(LOG_ERROR, "Unknown command: %s", argv[1]);
-            close_logging();
-            return EXIT_USAGE_ERROR;
+    int result = 0;
+    if (cmd) {
+        /* Execute command with appropriate argument passing */
+        if (cmd->pass_full_argc || strcmp(cmd->name, "run") == 0) {
+            /* Special case for 'run' command - needs argc-2, argv+2 */
+            result = cmd->handler(argc - 2, argv + 2);
+        } else {
+            /* Standard command - pass argc-1, argv+1 */
+            result = cmd->handler(argc - 1, argv + 1);
+        }
+    } else {
+        fprintf(stderr, "Error: Unknown command '%s'\n", argv[1]);
+        fprintf(stderr, "Try 'till --help' for usage information\n");
+        till_log(LOG_ERROR, "Unknown command: %s", argv[1]);
+        close_logging();
+        return EXIT_USAGE_ERROR;
     }
     
     till_log(LOG_END, "till %s", argv[1]);
@@ -215,14 +202,14 @@ static void print_usage(const char *program) {
     printf("  -i, --interactive   Interactive mode for supported commands\n");
     printf("\nCommands:\n");
     printf("  (none)              Dry run - show what sync would do\n");
-    printf("  sync                Pull updates for all Tekton installations\n");
-    printf("  sync --dry-run      Check for updates without pulling\n");
-    printf("  watch [hours]       Set watch daemon frequency (default: 24h)\n");
-    printf("  install [options]   Install Tekton or components\n");
-    printf("  uninstall <name>    Uninstall component\n");
-    printf("  hold <component>    Prevent component updates\n");
-    printf("  release <component> Allow component updates\n");
-    printf("  run <component> <cmd> [args]  Run component command\n");
+    
+    /* Print commands from table */
+    for (int i = 0; commands[i].name != NULL; i++) {
+        printf("  %-18s  %s\n", commands[i].name, commands[i].description);
+    }
+    
+    /* Additional host subcommands */
+    printf("\nHost subcommands:\n");
     printf("  host add <name> <user>@<host>  Add remote host\n");
     printf("  host test <name>    Test host connectivity\n");
     printf("  host setup <name>   Install Till on remote host\n");
@@ -231,8 +218,6 @@ static void print_usage(const char *program) {
     printf("  host sync [name]    Sync from remote host(s)\n");
     printf("  host status [name]  Show host status\n");
     printf("  host remove <name>  Remove host from configuration\n");
-    printf("  status              Show Till status\n");
-    printf("  update              Update Till from git repository\n");
     printf("\nExamples:\n");
     printf("  till                      # Show what would be synced\n");
     printf("  till sync                 # Synchronize now\n");
@@ -255,21 +240,14 @@ static void print_version(void) {
     printf("Config version: %s\n", TILL_CONFIG_VERSION);
 }
 
-/* Parse command string */
-static command_t parse_command(const char *cmd) {
-    if (strcmp(cmd, "sync") == 0) return CMD_SYNC;
-    if (strcmp(cmd, "watch") == 0) return CMD_WATCH;
-    if (strcmp(cmd, "install") == 0) return CMD_INSTALL;
-    if (strcmp(cmd, "uninstall") == 0) return CMD_UNINSTALL;
-    if (strcmp(cmd, "hold") == 0) return CMD_HOLD;
-    if (strcmp(cmd, "release") == 0) return CMD_RELEASE;
-    if (strcmp(cmd, "host") == 0) return CMD_HOST;
-    if (strcmp(cmd, "federate") == 0) return CMD_FEDERATE;
-    if (strcmp(cmd, "status") == 0) return CMD_STATUS;
-    if (strcmp(cmd, "run") == 0) return CMD_RUN;
-    if (strcmp(cmd, "update") == 0) return CMD_UPDATE;
-    if (strcmp(cmd, "help") == 0) return CMD_HELP;
-    return CMD_NONE;
+/* Find command by name - helper function for other uses */
+static const command_def_t* find_command(const char *name) {
+    for (int i = 0; commands[i].name != NULL; i++) {
+        if (strcmp(name, commands[i].name) == 0) {
+            return &commands[i];
+        }
+    }
+    return NULL;
 }
 
 
@@ -655,7 +633,7 @@ static int cmd_install(int argc, char *argv[]) {
         }
         
         /* Validate name */
-        if (validate_name(opts.name) != 0) {
+        if (validate_installation_name(opts.name) != 0) {
             fprintf(stderr, "Error: Invalid name '%s'\n", opts.name);
             return EXIT_USAGE_ERROR;
         }

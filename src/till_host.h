@@ -20,17 +20,11 @@ int till_host_exec(const char *name, const char *command);
 /* SSH interactive session to remote host */
 int till_host_ssh(const char *name, int argc, char *argv[]);
 
-/* Sync from remote host */
-int till_host_sync(const char *name);
-
-/* Sync with all hosts */
-int till_host_sync_all(void);
+/* Remove a host */
+int till_host_remove(const char *name, int clean_remote);
 
 /* Show host status */
 int till_host_status(const char *name);
-
-/* Remove a host */
-int till_host_remove(const char *name, int clean_remote);
 
 /* Main host command handler */
 int till_host_command(int argc, char *argv[]);

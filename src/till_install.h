@@ -30,13 +30,15 @@ typedef struct {
 int till_install_tekton(install_options_t *opts);
 int generate_env_local(install_options_t *opts);
 int clone_tekton_repo(const char *path);
+/* These are now in till_registry.h:
 int validate_name(const char *name);
-int allocate_ports(install_options_t *opts);
 int register_installation(install_options_t *opts);
 int get_primary_tekton_name(char *name, size_t size);
 int fuzzy_match_name(const char *input, char *matched, size_t size);
 int discover_tektons(void);
 int ensure_directory(const char *path);
+*/
+int allocate_ports(install_options_t *opts);
 int get_primary_name(char *name, size_t size);
 int save_installation_info(install_options_t *opts);
 

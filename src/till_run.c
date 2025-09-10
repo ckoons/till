@@ -33,44 +33,10 @@ typedef struct {
     int has_commands;
 } component_t;
 
-/* Get till configuration directory */
-static int get_till_config_dir(char *dir, size_t size) {
-    /* Use the common get_till_dir function - NO HOME DIRECTORY */
-    return get_till_dir(dir, size);
-}
-
 /* Load installed components from till-private.json */
 static cJSON *load_installations(void) {
-    char config_path[PATH_MAX];
-    if (get_till_config_dir(config_path, sizeof(config_path)) != 0) {
-        return NULL;
-    }
-    
-    strcat(config_path, "/tekton/till-private.json");
-    
-    FILE *fp = fopen(config_path, "r");
-    if (!fp) {
-        return NULL;
-    }
-    
-    fseek(fp, 0, SEEK_END);
-    long size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-    
-    char *content = malloc(size + 1);
-    if (!content) {
-        fclose(fp);
-        return NULL;
-    }
-    
-    fread(content, 1, size, fp);
-    content[size] = '\0';
-    fclose(fp);
-    
-    cJSON *json = cJSON_Parse(content);
-    free(content);
-    
-    return json;
+    /* Use common function to load till JSON */
+    return load_till_json("tekton/till-private.json");
 }
 
 /* Extract component name from registry name */
@@ -357,10 +323,15 @@ static int execute_component_command(const char *component, const char *command,
         return -1;
     }
     
+    /* Log the command execution */
+    till_log(LOG_INFO, "Executing command: %s %s for component %s", command, 
+             argc > 0 ? argv[0] : "", component);
+    
     /* Execute the command */
     pid_t pid = fork();
     if (pid == -1) {
         fprintf(stderr, "Error: Fork failed: %s\n", strerror(errno));
+        till_log(LOG_ERROR, "Fork failed for command %s: %s", command, strerror(errno));
         chdir(original_dir);
         free(exec_args);
         return -1;
@@ -382,9 +353,17 @@ static int execute_component_command(const char *component, const char *command,
     chdir(original_dir);
     free(exec_args);
     
-    /* Return child's exit status */
+    /* Log result */
     if (WIFEXITED(status)) {
-        return WEXITSTATUS(status);
+        int exit_code = WEXITSTATUS(status);
+        if (exit_code == 0) {
+            till_log(LOG_INFO, "Command %s completed successfully", command);
+        } else {
+            till_log(LOG_WARN, "Command %s exited with code %d", command, exit_code);
+        }
+        return exit_code;
+    } else {
+        till_log(LOG_ERROR, "Command %s terminated abnormally", command);
     }
     
     return -1;
