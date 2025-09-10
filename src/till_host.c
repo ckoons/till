@@ -812,7 +812,14 @@ int till_host_remove(const char *name, int clean_remote) {
     time_t now = time(NULL);
     char timestamp[64];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
-    cJSON_AddStringToObject(host, "removed_date", timestamp);
+    
+    /* Update or add removed_date */
+    cJSON *removed_date = cJSON_GetObjectItem(host, "removed_date");
+    if (removed_date) {
+        cJSON_SetValuestring(removed_date, timestamp);
+    } else {
+        cJSON_AddStringToObject(host, "removed_date", timestamp);
+    }
     
     /* Increment version */
     int version = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "version"));
@@ -1185,6 +1192,14 @@ static int propagate_hosts_update(void) {
         
         /* Skip self (check both name and actual_hostname) */
         if (local_hostname && actual_hostname && strcmp(actual_hostname, local_hostname) == 0) {
+            continue;
+        }
+        
+        /* Skip localhost entries - never propagate to localhost */
+        const char *hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "host"));
+        if (hostname && (strcmp(hostname, "localhost") == 0 || 
+                        strcmp(hostname, "127.0.0.1") == 0 ||
+                        strcmp(hostname, "::1") == 0)) {
             continue;
         }
         
