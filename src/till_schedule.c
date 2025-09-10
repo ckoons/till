@@ -23,10 +23,6 @@
 #define PATH_MAX 4096
 #endif
 
-/* Get schedule file path */
-static int get_schedule_path(char *path, size_t size) {
-    return build_till_path(path, size, "schedule.json");
-}
 
 /* Load schedule configuration */
 static cJSON *load_schedule(void) {

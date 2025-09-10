@@ -27,55 +27,6 @@ extern int g_interactive;
 
 /* Forward declarations */
 
-/* Helper: Get absolute path */
-static int get_absolute_path(const char *relative, char *absolute, size_t size) {
-    if (relative[0] == '/') {
-        /* Already absolute */
-        strncpy(absolute, relative, size);
-        return 0;
-    }
-    
-    /* Use realpath to properly resolve the path including .. components */
-    char resolved[TILL_MAX_PATH];
-    if (realpath(relative, resolved) != NULL) {
-        strncpy(absolute, resolved, size);
-        return 0;
-    }
-    
-    /* If realpath fails (e.g., path doesn't exist yet), construct it manually */
-    char cwd[TILL_MAX_PATH];
-    if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        return -1;
-    }
-    
-    /* Simple path resolution for non-existent paths */
-    if (strncmp(relative, "../", 3) == 0) {
-        /* Go up one directory */
-        char *last_slash = strrchr(cwd, '/');
-        if (last_slash) {
-            *last_slash = '\0';
-            snprintf(absolute, size, "%s/%s", cwd, relative + 3);
-        } else {
-            snprintf(absolute, size, "%s/%s", cwd, relative);
-        }
-    } else {
-        snprintf(absolute, size, "%s/%s", cwd, relative);
-    }
-    return 0;
-}
-
-/* Helper: Check if directory exists */
-static int dir_exists(const char *path) {
-    struct stat st;
-    return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
-}
-
-/* Helper: Check if file exists */
-static int file_exists(const char *path) {
-    struct stat st;
-    return (stat(path, &st) == 0 && S_ISREG(st.st_mode));
-}
-
 /* ensure_directory is now in till_common.c */
 
 /* Main installation function */
@@ -146,37 +97,21 @@ int get_primary_name(char *name, size_t size) {
     return 0;
 }
 
-/* Check if a port is in use and get process info */
+/* Wrapper for new process utilities */
 static int check_port_in_use(int port, char *process_info, size_t info_size) {
-    char cmd[256];
-    FILE *fp;
+    process_info_t info;
+    int pid = find_process_by_port(port, &info);
     
-    /* Use lsof to check port usage */
-    snprintf(cmd, sizeof(cmd), "lsof -i :%d 2>/dev/null | grep LISTEN", port);
-    fp = popen(cmd, "r");
-    if (!fp) return 0;
-    
-    char line[512];
-    if (fgets(line, sizeof(line), fp)) {
-        /* Extract process name and PID */
-        char proc_name[64];
-        int pid;
-        if (sscanf(line, "%63s %d", proc_name, &pid) == 2) {
-            if (process_info && info_size > 0) {
-                snprintf(process_info, info_size, "%s (PID: %d)", proc_name, pid);
-            }
-            pclose(fp);
-            return pid;
-        }
+    if (pid > 0 && process_info && info_size > 0) {
+        snprintf(process_info, info_size, "%s (PID: %d)", info.name, info.pid);
     }
     
-    pclose(fp);
-    return 0;
+    return pid;
 }
 
-/* Kill a process by PID */
+/* Wrapper for process killing */
 static int kill_process(int pid) {
-    return kill(pid, SIGTERM);
+    return kill_process_graceful(pid, 1000);  /* 1 second timeout */
 }
 
 /* Find available port range */
@@ -190,8 +125,7 @@ static int find_available_port_range(int *base_port, int range_size) {
         
         /* Check if entire range is available */
         for (int offset = 0; offset < range_size; offset++) {
-            char proc_info[256];
-            if (check_port_in_use(port + offset, proc_info, sizeof(proc_info))) {
+            if (!is_port_available(port + offset)) {
                 all_clear = 0;
                 break;
             }

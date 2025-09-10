@@ -18,8 +18,7 @@
 #include "till_registry.h"
 #include "cJSON.h"
 
-/* Tekton repository URL */
-#define TEKTON_REPO_URL "https://github.com/Tekton-Development-Community/Tekton"
+/* Use TEKTON_REPO_URL from till_config.h */
 
 /* Clone Tekton repository */
 int clone_tekton_repo(const char *path) {

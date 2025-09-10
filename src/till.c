@@ -240,15 +240,6 @@ static void print_version(void) {
     printf("Config version: %s\n", TILL_CONFIG_VERSION);
 }
 
-/* Find command by name - helper function for other uses */
-static const command_def_t* find_command(const char *name) {
-    for (int i = 0; commands[i].name != NULL; i++) {
-        if (strcmp(name, commands[i].name) == 0) {
-            return &commands[i];
-        }
-    }
-    return NULL;
-}
 
 
 /* Dry run - show what sync would do */
