@@ -29,11 +29,11 @@ BIN_DIR = .
 TARGET = $(BIN_DIR)/till
 
 # Source files
-SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/cJSON.c
-HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/cJSON.h
+SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/cJSON.c
+HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/cJSON.h
 
 # Object files
-OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/cJSON.o
+OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/cJSON.o
 
 # Default target
 all: $(TARGET)
@@ -57,6 +57,10 @@ $(BUILD_DIR)/till.o: $(SRC_DIR)/till.c $(HEADERS)
 $(BUILD_DIR)/till_install.o: $(SRC_DIR)/till_install.c $(HEADERS)
 	@echo "Compiling till_install.c..."
 	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_install.c -o $(BUILD_DIR)/till_install.o
+
+$(BUILD_DIR)/till_tekton.o: $(SRC_DIR)/till_tekton.c $(HEADERS)
+	@echo "Compiling till_tekton.c..."
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_tekton.c -o $(BUILD_DIR)/till_tekton.o
 
 $(BUILD_DIR)/till_host.o: $(SRC_DIR)/till_host.c $(HEADERS)
 	@echo "Compiling till_host.c..."
