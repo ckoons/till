@@ -219,7 +219,6 @@ int till_host_add(const char *name, const char *user_at_host) {
     cJSON_AddStringToObject(host_obj, "host", host);
     cJSON_AddNumberToObject(host_obj, "port", port);
     cJSON_AddStringToObject(host_obj, "status", "untested");
-    cJSON_AddStringToObject(host_obj, "state", "active");  /* For soft delete */
     
     /* Add timestamp properly */
     time_t now = time(NULL);
@@ -804,26 +803,9 @@ int till_host_remove(const char *name, int clean_remote) {
         }
     }
     
-    /* 1. Soft delete - mark as removed instead of deleting */
-    printf("Marking host '%s' as removed...\n", name);
-    cJSON_SetValuestring(cJSON_GetObjectItem(host, "state"), "removed");
-    
-    /* Add removal timestamp */
-    time_t now = time(NULL);
-    char timestamp[64];
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
-    
-    /* Update or add removed_date */
-    cJSON *removed_date = cJSON_GetObjectItem(host, "removed_date");
-    if (removed_date) {
-        cJSON_SetValuestring(removed_date, timestamp);
-    } else {
-        cJSON_AddStringToObject(host, "removed_date", timestamp);
-    }
-    
-    /* Increment version */
-    int version = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "version"));
-    cJSON_SetNumberValue(cJSON_GetObjectItem(host, "version"), version + 1);
+    /* 1. Delete host entry from JSON */
+    printf("Removing host '%s'...\n", name);
+    cJSON_DeleteItemFromObject(hosts, name);
     
     /* Save updated hosts file */
     if (save_hosts(json) != 0) {
@@ -998,10 +980,8 @@ int till_host_status(const char *name) {
     } else {
         /* Show all hosts */
         printf("Configured hosts:\n");
-        printf("%-20s %-30s %-15s %-15s\n", "Name", "Host", "Status", "State");
-        printf("%-20s %-30s %-15s %-15s\n", "----", "----", "------", "-----");
-        
-        int removed_count = 0;
+        printf("%-20s %-30s %-15s\n", "Name", "Host", "Status");
+        printf("%-20s %-30s %-15s\n", "----", "----", "------");
         
         cJSON *host = NULL;
         cJSON_ArrayForEach(host, hosts) {
@@ -1009,19 +989,8 @@ int till_host_status(const char *name) {
             const char *user = cJSON_GetStringValue(cJSON_GetObjectItem(host, "user"));
             const char *hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "host"));
             const char *status = cJSON_GetStringValue(cJSON_GetObjectItem(host, "status"));
-            const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(host, "state"));
             
-            if (!state) state = "active";  /* Default for old entries */
-            
-            if (strcmp(state, "removed") == 0) {
-                removed_count++;
-                continue;  /* Skip removed hosts in normal list */
-            }
-            printf("%-20s %s@%-25s %-15s %-15s\n", host_name, user, hostname, status, state);
-        }
-        
-        if (removed_count > 0) {
-            printf("\n(%d removed hosts not shown, use 'till host list --all' to see them)\n", removed_count);
+            printf("%-20s %s@%-25s %-15s\n", host_name, user, hostname, status);
         }
         
         printf("\nSSH aliases: <name>\n");
@@ -1188,7 +1157,6 @@ static int propagate_hosts_update(void) {
     cJSON_ArrayForEach(host, hosts) {
         const char *name = host->string;
         const char *actual_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "actual_hostname"));
-        const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(host, "state"));
         
         /* Skip self (check both name and actual_hostname) */
         if (local_hostname && actual_hostname && strcmp(actual_hostname, local_hostname) == 0) {
@@ -1203,10 +1171,6 @@ static int propagate_hosts_update(void) {
             continue;
         }
         
-        /* Skip removed hosts */
-        if (state && strcmp(state, "removed") == 0) {
-            continue;
-        }
         
         total_count++;
         if (send_hosts_to_remote(name) == 0) {
@@ -1358,17 +1322,12 @@ int till_host_sync_all(void) {
     cJSON_ArrayForEach(host, hosts) {
         const char *name = host->string;
         const char *actual_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "actual_hostname"));
-        const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(host, "state"));
         
         /* Skip self */
         if (local_hostname && actual_hostname && strcmp(actual_hostname, local_hostname) == 0) {
             continue;
         }
         
-        /* Skip removed hosts */
-        if (state && strcmp(state, "removed") == 0) {
-            continue;
-        }
         
         printf("  Syncing with %s... ", name);
         fflush(stdout);
