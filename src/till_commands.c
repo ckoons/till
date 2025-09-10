@@ -35,15 +35,7 @@ extern void till_log(int level, const char *format, ...);
 extern int g_interactive;
 
 /* Forward declarations */
-static int ensure_discovery(void);
-
-/* Ensure discovery has been run */
-static int ensure_discovery(void) {
-    /* Always run discovery to verify current state */
-    till_log(LOG_INFO, "Running discovery to verify installations");
-    discover_tektons();
-    return 0;
-}
+/* None needed currently */
 
 
 /* Command: sync - Pull updates for all Tekton installations */
@@ -367,6 +359,8 @@ int cmd_run(int argc, char *argv[]) {
 
 /* Command: update - Update Till from git */
 int cmd_update(int argc, char *argv[]) {
+    (void)argc;  /* Unused */
+    (void)argv;  /* Unused */
     int behind = check_till_updates(1);
     
     if (behind == 0) {
