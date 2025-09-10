@@ -29,6 +29,9 @@
 /* Forward declarations */
 static cJSON *load_hosts(void);
 static int save_hosts(cJSON *json);
+static int propagate_hosts_update(void);
+static int send_hosts_to_remote(const char *name);
+static int merge_hosts_from_remote(const char *json_str);
 
 /* Helper to get host connection info from JSON */
 static int get_host_info(const char *name, char *user, size_t user_size, 
@@ -182,6 +185,20 @@ int till_host_add(const char *name, const char *user_at_host) {
         json = cJSON_CreateObject();
         cJSON_AddObjectToObject(json, "hosts");
         cJSON_AddStringToObject(json, "updated", "0");
+        
+        /* Add local hostname on first creation */
+        char local_hostname[256];
+        if (gethostname(local_hostname, sizeof(local_hostname)) == 0) {
+            cJSON_AddStringToObject(json, "local_hostname", local_hostname);
+        }
+    }
+    
+    /* Ensure local_hostname exists */
+    if (!cJSON_GetObjectItem(json, "local_hostname")) {
+        char local_hostname[256];
+        if (gethostname(local_hostname, sizeof(local_hostname)) == 0) {
+            cJSON_AddStringToObject(json, "local_hostname", local_hostname);
+        }
     }
     
     cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
@@ -202,7 +219,17 @@ int till_host_add(const char *name, const char *user_at_host) {
     cJSON_AddStringToObject(host_obj, "host", host);
     cJSON_AddNumberToObject(host_obj, "port", port);
     cJSON_AddStringToObject(host_obj, "status", "untested");
-    cJSON_AddStringToObject(host_obj, "added", ctime(&(time_t){time(NULL)}));
+    cJSON_AddStringToObject(host_obj, "state", "active");  /* For soft delete */
+    
+    /* Add timestamp properly */
+    time_t now = time(NULL);
+    char timestamp[64];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+    cJSON_AddStringToObject(host_obj, "added", timestamp);
+    cJSON_AddStringToObject(host_obj, "last_seen", timestamp);
+    
+    /* Version for update tracking */
+    cJSON_AddNumberToObject(host_obj, "version", 1);
     
     cJSON_AddItemToObject(hosts, name, host_obj);
     
@@ -246,10 +273,12 @@ int till_host_add(const char *name, const char *user_at_host) {
     }
     printf("✓ SSH connectivity confirmed\n");
     
-    /* Detect remote platform */
+    /* Detect remote platform and hostname */
     printf("\nDetecting remote platform...\n");
     char detect_cmd[512];
     char platform[64] = "unknown";
+    char actual_hostname[256] = "";
+    
     snprintf(detect_cmd, sizeof(detect_cmd),
         "ssh %s@%s -p %d 'uname -s' 2>/dev/null",
         user, host, port);
@@ -263,6 +292,24 @@ int till_host_add(const char *name, const char *user_at_host) {
         pclose(fp);
     }
     printf("✓ Remote platform: %s\n", platform);
+    
+    /* Get actual hostname from remote */
+    snprintf(detect_cmd, sizeof(detect_cmd),
+        "ssh %s@%s -p %d 'hostname' 2>/dev/null",
+        user, host, port);
+    
+    fp = popen(detect_cmd, "r");
+    if (fp) {
+        if (fgets(actual_hostname, sizeof(actual_hostname), fp)) {
+            /* Remove newline */
+            actual_hostname[strcspn(actual_hostname, "\n")] = '\0';
+            printf("✓ Remote hostname: %s\n", actual_hostname);
+            
+            /* Update host object with actual hostname */
+            cJSON_AddStringToObject(host_obj, "actual_hostname", actual_hostname);
+        }
+        pclose(fp);
+    }
     
     /* Install Till on remote */
     printf("\nInstalling Till on remote host...\n");
@@ -337,6 +384,22 @@ int till_host_add(const char *name, const char *user_at_host) {
     /* Update host status to 'ready' */
     cJSON_SetValuestring(cJSON_GetObjectItem(host_obj, "status"), "ready");
     save_hosts(json);
+    
+    /* Send our hosts list to the newly added host */
+    printf("\nSharing host information with remote...\n");
+    if (send_hosts_to_remote(name) == 0) {
+        printf("✓ Host information shared\n");
+    } else {
+        printf("⚠ Warning: Could not share host information\n");
+    }
+    
+    /* Propagate the update to all other hosts */
+    printf("\nPropagating update to other hosts...\n");
+    if (propagate_hosts_update() == 0) {
+        printf("✓ All hosts updated\n");
+    } else {
+        printf("⚠ Warning: Some hosts may not have been updated\n");
+    }
     
     printf("\n✅ Host '%s' fully configured and ready!\n", name);
     printf("\nYou can now use:\n");
@@ -741,9 +804,19 @@ int till_host_remove(const char *name, int clean_remote) {
         }
     }
     
-    /* 1. Remove from hosts JSON */
-    printf("Removing host '%s' from configuration...\n", name);
-    cJSON_DeleteItemFromObject(hosts, name);
+    /* 1. Soft delete - mark as removed instead of deleting */
+    printf("Marking host '%s' as removed...\n", name);
+    cJSON_SetValuestring(cJSON_GetObjectItem(host, "state"), "removed");
+    
+    /* Add removal timestamp */
+    time_t now = time(NULL);
+    char timestamp[64];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+    cJSON_AddStringToObject(host, "removed_date", timestamp);
+    
+    /* Increment version */
+    int version = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "version"));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(host, "version"), version + 1);
     
     /* Save updated hosts file */
     if (save_hosts(json) != 0) {
@@ -752,6 +825,15 @@ int till_host_remove(const char *name, int clean_remote) {
         cJSON_Delete(json);
         return -1;
     }
+    
+    /* Propagate the removal to other hosts */
+    printf("Propagating removal to other hosts...\n");
+    if (propagate_hosts_update() == 0) {
+        printf("✓ All hosts updated\n");
+    } else {
+        printf("⚠ Warning: Some hosts may not have been updated\n");
+    }
+    
     cJSON_Delete(json);
     
     /* 2. Remove SSH config entry */
@@ -909,8 +991,10 @@ int till_host_status(const char *name) {
     } else {
         /* Show all hosts */
         printf("Configured hosts:\n");
-        printf("%-20s %-30s %-15s\n", "Name", "Host", "Status");
-        printf("%-20s %-30s %-15s\n", "----", "----", "------");
+        printf("%-20s %-30s %-15s %-15s\n", "Name", "Host", "Status", "State");
+        printf("%-20s %-30s %-15s %-15s\n", "----", "----", "------", "-----");
+        
+        int removed_count = 0;
         
         cJSON *host = NULL;
         cJSON_ArrayForEach(host, hosts) {
@@ -918,8 +1002,19 @@ int till_host_status(const char *name) {
             const char *user = cJSON_GetStringValue(cJSON_GetObjectItem(host, "user"));
             const char *hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "host"));
             const char *status = cJSON_GetStringValue(cJSON_GetObjectItem(host, "status"));
+            const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(host, "state"));
             
-            printf("%-20s %s@%-25s %-15s\n", host_name, user, hostname, status);
+            if (!state) state = "active";  /* Default for old entries */
+            
+            if (strcmp(state, "removed") == 0) {
+                removed_count++;
+                continue;  /* Skip removed hosts in normal list */
+            }
+            printf("%-20s %s@%-25s %-15s %-15s\n", host_name, user, hostname, status, state);
+        }
+        
+        if (removed_count > 0) {
+            printf("\n(%d removed hosts not shown, use 'till host list --all' to see them)\n", removed_count);
         }
         
         printf("\nSSH aliases: <name>\n");
@@ -940,9 +1035,9 @@ static void print_host_help(void) {
     printf("  setup <name>            Install Till on remote host\n");
     printf("  exec <name> <command>   Execute Till command on remote host\n");
     printf("  ssh <name> [command]    Open SSH session to remote host\n");
-    printf("  sync [name]             Sync updates from remote host(s)\n");
+    printf("  sync                    Sync host list with all known hosts\n");
     printf("  status [name]           Show host configuration and status\n");
-    printf("  remove <name> [opts]    Remove a host from Till configuration\n");
+    printf("  remove <name> [opts]    Remove a host (soft delete)\n");
     printf("\nOptions:\n");
     printf("  --help, -h              Show this help message\n");
     printf("\nExamples:\n");
@@ -1036,9 +1131,278 @@ int till_host_command(int argc, char *argv[]) {
         }
         return till_host_remove(argv[2], clean_remote);
     }
+    else if (strcmp(subcmd, "sync") == 0) {
+        /* Manual sync command */
+        return till_host_sync_all();
+    }
+    else if (strcmp(subcmd, "merge") == 0) {
+        /* Receive and merge hosts from stdin (for remote calls) */
+        char buffer[65536];
+        size_t total = 0;
+        size_t n;
+        while ((n = fread(buffer + total, 1, sizeof(buffer) - total - 1, stdin)) > 0) {
+            total += n;
+        }
+        buffer[total] = '\0';
+        return merge_hosts_from_remote(buffer);
+    }
     else {
         fprintf(stderr, "Unknown host subcommand: %s\n\n", subcmd);
         print_host_help();
         return -1;
     }
+}
+
+/* Propagate hosts update to all known hosts */
+static int propagate_hosts_update(void) {
+    cJSON *json = load_hosts();
+    if (!json) return -1;
+    
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    if (!hosts) {
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    const char *local_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(json, "local_hostname"));
+    if (!local_hostname) {
+        /* Get it now if missing */
+        char hostname[256];
+        if (gethostname(hostname, sizeof(hostname)) == 0) {
+            local_hostname = hostname;
+        }
+    }
+    
+    int success_count = 0;
+    int total_count = 0;
+    
+    /* Iterate through all hosts */
+    cJSON *host = NULL;
+    cJSON_ArrayForEach(host, hosts) {
+        const char *name = host->string;
+        const char *actual_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "actual_hostname"));
+        const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(host, "state"));
+        
+        /* Skip self (check both name and actual_hostname) */
+        if (local_hostname && actual_hostname && strcmp(actual_hostname, local_hostname) == 0) {
+            continue;
+        }
+        
+        /* Skip removed hosts */
+        if (state && strcmp(state, "removed") == 0) {
+            continue;
+        }
+        
+        total_count++;
+        if (send_hosts_to_remote(name) == 0) {
+            success_count++;
+        }
+    }
+    
+    cJSON_Delete(json);
+    return (success_count == total_count) ? 0 : -1;
+}
+
+/* Send hosts file to a remote host */
+static int send_hosts_to_remote(const char *name) {
+    /* Get host info */
+    char user[256], host[256];
+    int port;
+    if (get_host_info(name, user, sizeof(user), host, sizeof(host), &port) != 0) {
+        return -1;
+    }
+    
+    /* Load current hosts */
+    cJSON *json = load_hosts();
+    if (!json) return -1;
+    
+    /* Convert to string */
+    char *json_str = cJSON_Print(json);
+    cJSON_Delete(json);
+    if (!json_str) return -1;
+    
+    /* Send to remote via SSH */
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd),
+        "ssh -o ConnectTimeout=5 %s@%s -p %d '" TILL_REMOTE_INSTALL_PATH "/till host merge' 2>/dev/null",
+        user, host, port);
+    
+    FILE *fp = popen(cmd, "w");
+    if (!fp) {
+        free(json_str);
+        return -1;
+    }
+    
+    fwrite(json_str, 1, strlen(json_str), fp);
+    int result = pclose(fp);
+    free(json_str);
+    
+    return (result == 0) ? 0 : -1;
+}
+
+/* Merge hosts from remote (called via SSH) */
+static int merge_hosts_from_remote(const char *json_str) {
+    if (!json_str || strlen(json_str) == 0) {
+        return -1;
+    }
+    
+    /* Parse incoming JSON */
+    cJSON *incoming = cJSON_Parse(json_str);
+    if (!incoming) {
+        return -1;
+    }
+    
+    /* Load local hosts */
+    cJSON *local = load_hosts();
+    if (!local) {
+        local = cJSON_CreateObject();
+        cJSON_AddObjectToObject(local, "hosts");
+    }
+    
+    /* Ensure local_hostname exists */
+    const char *local_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(local, "local_hostname"));
+    if (!local_hostname) {
+        char hostname[256];
+        if (gethostname(hostname, sizeof(hostname)) == 0) {
+            cJSON_AddStringToObject(local, "local_hostname", hostname);
+            local_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(local, "local_hostname"));
+        }
+    }
+    
+    /* Get hosts objects */
+    cJSON *local_hosts = cJSON_GetObjectItem(local, "hosts");
+    cJSON *incoming_hosts = cJSON_GetObjectItem(incoming, "hosts");
+    
+    if (!local_hosts) {
+        local_hosts = cJSON_AddObjectToObject(local, "hosts");
+    }
+    
+    if (incoming_hosts) {
+        /* Merge each host */
+        cJSON *host = NULL;
+        cJSON_ArrayForEach(host, incoming_hosts) {
+            const char *name = host->string;
+            const char *actual_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "actual_hostname"));
+            
+            /* Skip self */
+            if (local_hostname && actual_hostname && strcmp(actual_hostname, local_hostname) == 0) {
+                continue;
+            }
+            
+            /* Check if we have this host */
+            cJSON *existing = cJSON_GetObjectItem(local_hosts, name);
+            if (existing) {
+                /* Compare versions */
+                int local_version = cJSON_GetNumberValue(cJSON_GetObjectItem(existing, "version"));
+                int incoming_version = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "version"));
+                
+                if (incoming_version > local_version) {
+                    /* Replace with newer version */
+                    cJSON_DeleteItemFromObject(local_hosts, name);
+                    cJSON_AddItemToObject(local_hosts, name, cJSON_Duplicate(host, 1));
+                }
+            } else {
+                /* Add new host */
+                cJSON_AddItemToObject(local_hosts, name, cJSON_Duplicate(host, 1));
+            }
+        }
+    }
+    
+    /* Save merged hosts */
+    int result = save_hosts(local);
+    cJSON_Delete(local);
+    cJSON_Delete(incoming);
+    
+    return result;
+}
+
+/* Manual sync with all hosts */
+int till_host_sync_all(void) {
+    printf("Synchronizing with all hosts...\n");
+    
+    cJSON *json = load_hosts();
+    if (!json) {
+        fprintf(stderr, "No hosts configured\n");
+        return -1;
+    }
+    
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    if (!hosts || cJSON_GetArraySize(hosts) == 0) {
+        printf("No remote hosts to sync with\n");
+        cJSON_Delete(json);
+        return 0;
+    }
+    
+    const char *local_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(json, "local_hostname"));
+    
+    int success = 0;
+    int failed = 0;
+    
+    /* Exchange with each host */
+    cJSON *host = NULL;
+    cJSON_ArrayForEach(host, hosts) {
+        const char *name = host->string;
+        const char *actual_hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "actual_hostname"));
+        const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(host, "state"));
+        
+        /* Skip self */
+        if (local_hostname && actual_hostname && strcmp(actual_hostname, local_hostname) == 0) {
+            continue;
+        }
+        
+        /* Skip removed hosts */
+        if (state && strcmp(state, "removed") == 0) {
+            continue;
+        }
+        
+        printf("  Syncing with %s... ", name);
+        fflush(stdout);
+        
+        /* Get their hosts */
+        char user[256], hostname[256];
+        int port;
+        if (get_host_info(name, user, sizeof(user), hostname, sizeof(hostname), &port) == 0) {
+            char cmd[1024];
+            snprintf(cmd, sizeof(cmd),
+                "ssh -o ConnectTimeout=5 %s@%s -p %d 'cat ~/.till/hosts-local.json' 2>/dev/null",
+                user, hostname, port);
+            
+            FILE *fp = popen(cmd, "r");
+            if (fp) {
+                char buffer[65536];
+                size_t total = 0;
+                size_t n;
+                while ((n = fread(buffer + total, 1, sizeof(buffer) - total - 1, fp)) > 0) {
+                    total += n;
+                }
+                buffer[total] = '\0';
+                pclose(fp);
+                
+                if (total > 0 && merge_hosts_from_remote(buffer) == 0) {
+                    /* Send our updated list back */
+                    if (send_hosts_to_remote(name) == 0) {
+                        printf("✓\n");
+                        success++;
+                    } else {
+                        printf("⚠ (partial)\n");
+                        failed++;
+                    }
+                } else {
+                    printf("✗\n");
+                    failed++;
+                }
+            } else {
+                printf("✗\n");
+                failed++;
+            }
+        } else {
+            printf("✗\n");
+            failed++;
+        }
+    }
+    
+    cJSON_Delete(json);
+    
+    printf("\nSync complete: %d successful, %d failed\n", success, failed);
+    return (failed > 0) ? -1 : 0;
 }

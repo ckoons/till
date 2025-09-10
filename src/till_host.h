@@ -23,6 +23,9 @@ int till_host_ssh(const char *name, int argc, char *argv[]);
 /* Sync from remote host */
 int till_host_sync(const char *name);
 
+/* Sync with all hosts */
+int till_host_sync_all(void);
+
 /* Show host status */
 int till_host_status(const char *name);
 
