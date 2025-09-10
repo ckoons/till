@@ -34,6 +34,7 @@ cJSON* load_json_file(const char *path);
 int save_json_file(const char *path, cJSON *json);
 cJSON* load_till_json(const char *filename);
 int save_till_json(const char *filename, cJSON *json);
+cJSON* load_or_create_registry(void);
 
 /* Command execution */
 int run_command(const char *cmd, char *output, size_t output_size);

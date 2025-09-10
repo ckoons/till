@@ -63,8 +63,7 @@ static int has_command_directory(const char *root) {
     char cmd_dir[PATH_MAX];
     snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
     
-    struct stat st;
-    return (stat(cmd_dir, &st) == 0 && S_ISDIR(st.st_mode));
+    return is_directory(cmd_dir);
 }
 
 /* List available commands for a component */
@@ -86,8 +85,7 @@ static int list_component_commands(const char *component, const char *root) {
             char cmd_path[PATH_MAX];
             snprintf(cmd_path, sizeof(cmd_path), "%s/%s", cmd_dir, entry->d_name);
             
-            struct stat st;
-            if (stat(cmd_path, &st) == 0 && (st.st_mode & S_IXUSR)) {
+            if (is_executable(cmd_path)) {
                 printf("    - %s\n", entry->d_name);
                 count++;
             }
@@ -255,42 +253,37 @@ static int execute_component_command(const char *component, const char *command,
     snprintf(cmd_path, sizeof(cmd_path), "%s/TILL_COMMANDS_DIR/%s", root, command);
     
     /* Check if command exists and is executable */
-    struct stat st;
-    if (stat(cmd_path, &st) != 0) {
-        if (errno == ENOENT) {
-            fprintf(stderr, "Error: Command '%s' not found for component '%s'.\n", 
-                    command, component);
-            
-            /* List available commands */
-            char cmd_dir[PATH_MAX];
-            snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
-            
-            DIR *dir = opendir(cmd_dir);
-            if (dir) {
-                printf("\nAvailable commands for %s:\n", component);
-                struct dirent *entry;
-                while ((entry = readdir(dir))) {
-                    if (entry->d_name[0] != '.') {
-                        char check_path[PATH_MAX];
-                        snprintf(check_path, sizeof(check_path), "%s/%s", 
-                                cmd_dir, entry->d_name);
-                        if (stat(check_path, &st) == 0 && (st.st_mode & S_IXUSR)) {
-                            printf("  - %s\n", entry->d_name);
-                        }
+    if (!path_exists(cmd_path)) {
+        fprintf(stderr, "Error: Command '%s' not found for component '%s'.\n", 
+                command, component);
+        
+        /* List available commands */
+        char cmd_dir[PATH_MAX];
+        snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
+        
+        DIR *dir = opendir(cmd_dir);
+        if (dir) {
+            printf("\nAvailable commands for %s:\n", component);
+            struct dirent *entry;
+            while ((entry = readdir(dir))) {
+                if (entry->d_name[0] != '.') {
+                    char check_path[PATH_MAX];
+                    snprintf(check_path, sizeof(check_path), "%s/%s", 
+                            cmd_dir, entry->d_name);
+                    if (is_executable(check_path)) {
+                        printf("  - %s\n", entry->d_name);
                     }
                 }
-                closedir(dir);
-            } else {
-                fprintf(stderr, "\nComponent '%s' has no TILL_COMMANDS_DIR directory.\n", 
-                        component);
             }
+            closedir(dir);
         } else {
-            fprintf(stderr, "Error: Cannot access command: %s\n", strerror(errno));
+            fprintf(stderr, "\nComponent '%s' has no TILL_COMMANDS_DIR directory.\n", 
+                    component);
         }
         return -1;
     }
     
-    if (!(st.st_mode & S_IXUSR)) {
+    if (!is_executable(cmd_path)) {
         fprintf(stderr, "Error: Command '%s' is not executable.\n", command);
         fprintf(stderr, "Fix with: chmod +x %s\n", cmd_path);
         return -1;

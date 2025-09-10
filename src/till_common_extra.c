@@ -542,3 +542,51 @@ int symlink_points_to(const char *link_path, const char *expected_target) {
     actual_target[len] = '\0';
     return (strcmp(actual_target, expected_target) == 0);
 }
+
+/* SSH command utilities */
+int build_ssh_command(char *cmd, size_t size, const char *user, const char *host, 
+                      int port, const char *remote_cmd) {
+    return snprintf(cmd, size, 
+        "ssh -o ConnectTimeout=5 -o BatchMode=yes %s@%s -p %d '%s' 2>/dev/null",
+        user, host, port, remote_cmd ? remote_cmd : "");
+}
+
+int run_ssh_command(const char *user, const char *host, int port, 
+                    const char *remote_cmd, char *output, size_t output_size) {
+    char ssh_cmd[2048];
+    build_ssh_command(ssh_cmd, sizeof(ssh_cmd), user, host, port, remote_cmd);
+    return run_command(ssh_cmd, output, output_size);
+}
+
+/* Run SSH command using host configuration from hosts file */
+int run_ssh_host_command(const char *host_name, const char *remote_cmd,
+                        char *output, size_t output_size) {
+    /* Load host configuration */
+    cJSON *json = load_till_json("hosts-local.json");
+    if (!json) {
+        till_error("No hosts configured");
+        return -1;
+    }
+    
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    cJSON *host = cJSON_GetObjectItem(hosts, host_name);
+    if (!host) {
+        till_error("Host '%s' not found", host_name);
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    const char *user = json_get_string(host, "user", NULL);
+    const char *hostname = json_get_string(host, "host", NULL);
+    int port = json_get_int(host, "port", 22);
+    
+    if (!user || !hostname) {
+        till_error("Invalid host configuration for '%s'", host_name);
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    int result = run_ssh_command(user, hostname, port, remote_cmd, output, output_size);
+    cJSON_Delete(json);
+    return result;
+}

@@ -78,7 +78,7 @@ int till_host_add(const char *name, const char *user_at_host) {
     if (parse_host_spec(user_at_host, user, sizeof(user), 
                        host, sizeof(host), &port) != 0) {
         till_log(LOG_ERROR, "Invalid host specification: %s", user_at_host);
-        fprintf(stderr, "Error: Invalid format. Use: user@host[:port]\n");
+        till_error("Invalid format. Use: user@host[:port]\n");
         return -1;
     }
     
@@ -87,7 +87,7 @@ int till_host_add(const char *name, const char *user_at_host) {
     if (!json) {
         json = cJSON_CreateObject();
         cJSON_AddObjectToObject(json, "hosts");
-        cJSON_AddStringToObject(json, "updated", "0");
+        json_set_string(json, "updated", "0");
     }
     
     cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
@@ -98,23 +98,23 @@ int till_host_add(const char *name, const char *user_at_host) {
     /* Check if host already exists */
     if (cJSON_GetObjectItem(hosts, name)) {
         till_log(LOG_ERROR, "Host '%s' already exists", name);
-        fprintf(stderr, "Error: Host '%s' already exists\n", name);
+        till_error("Host '%s' already exists\n", name);
         cJSON_Delete(json);
         return -1;
     }
     
     /* Add host entry */
     cJSON *host_obj = cJSON_CreateObject();
-    cJSON_AddStringToObject(host_obj, "user", user);
-    cJSON_AddStringToObject(host_obj, "host", host);
-    cJSON_AddNumberToObject(host_obj, "port", port);
-    cJSON_AddStringToObject(host_obj, "status", "untested");
+    json_set_string(host_obj, "user", user);
+    json_set_string(host_obj, "host", host);
+    json_set_int(host_obj, "port", port);
+    json_set_string(host_obj, "status", "untested");
     
     /* Add timestamp */
     time_t now = time(NULL);
     char timestamp[64];
     strftime(timestamp, sizeof(timestamp), "%a %b %d %H:%M:%S %Y", localtime(&now));
-    cJSON_AddStringToObject(host_obj, "added", timestamp);
+    json_set_string(host_obj, "added", timestamp);
     
     cJSON_AddItemToObject(hosts, name, host_obj);
     
@@ -126,7 +126,7 @@ int till_host_add(const char *name, const char *user_at_host) {
     /* Save hosts file */
     if (save_till_json("hosts-local.json", json) != 0) {
         till_log(LOG_ERROR, "Failed to save hosts file");
-        fprintf(stderr, "Error: Failed to save hosts\n");
+        till_error("Failed to save hosts\n");
         cJSON_Delete(json);
         return -1;
     }
@@ -157,7 +157,7 @@ int till_host_test(const char *name) {
     cJSON *json = load_till_json("hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
-        fprintf(stderr, "Error: No hosts configured\n");
+        till_error("No hosts configured\n");
         return -1;
     }
     
@@ -165,7 +165,7 @@ int till_host_test(const char *name) {
     cJSON *host = cJSON_GetObjectItem(hosts, name);
     if (!host) {
         till_log(LOG_ERROR, "Host '%s' not found", name);
-        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        till_error("Host '%s' not found\n", name);
         cJSON_Delete(json);
         return -1;
     }
@@ -212,7 +212,7 @@ int till_host_setup(const char *name) {
     cJSON *json = load_till_json("hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
-        fprintf(stderr, "Error: No hosts configured\n");
+        till_error("No hosts configured\n");
         return -1;
     }
     
@@ -220,7 +220,7 @@ int till_host_setup(const char *name) {
     cJSON *host = cJSON_GetObjectItem(hosts, name);
     if (!host) {
         till_log(LOG_ERROR, "Host '%s' not found", name);
-        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        till_error("Host '%s' not found\n", name);
         cJSON_Delete(json);
         return -1;
     }
@@ -264,7 +264,7 @@ int till_host_setup(const char *name) {
         
         if (run_ssh_command(user, hostname, port, install_cmd, NULL, 0) != 0) {
             till_log(LOG_ERROR, "Failed to install Till on host '%s'", name);
-            fprintf(stderr, "Error: Failed to install Till on remote\n");
+            till_error("Failed to install Till on remote\n");
             fprintf(stderr, "Please ensure the remote host has:\n");
             fprintf(stderr, "  - git installed\n");
             fprintf(stderr, "  - C compiler (gcc/clang) installed\n");
@@ -307,7 +307,7 @@ int till_host_exec(const char *name, const char *command) {
     cJSON *json = load_till_json("hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
-        fprintf(stderr, "Error: No hosts configured\n");
+        till_error("No hosts configured\n");
         return -1;
     }
     
@@ -315,7 +315,7 @@ int till_host_exec(const char *name, const char *command) {
     cJSON *host = cJSON_GetObjectItem(hosts, name);
     if (!host) {
         till_log(LOG_ERROR, "Host '%s' not found", name);
-        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        till_error("Host '%s' not found\n", name);
         cJSON_Delete(json);
         return -1;
     }
@@ -349,7 +349,7 @@ int till_host_ssh(const char *name, int argc, char *argv[]) {
     cJSON *json = load_till_json("hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
-        fprintf(stderr, "Error: No hosts configured\n");
+        till_error("No hosts configured\n");
         return -1;
     }
     
@@ -357,7 +357,7 @@ int till_host_ssh(const char *name, int argc, char *argv[]) {
     cJSON *host = cJSON_GetObjectItem(hosts, name);
     if (!host) {
         till_log(LOG_ERROR, "Host '%s' not found", name);
-        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        till_error("Host '%s' not found\n", name);
         cJSON_Delete(json);
         return -1;
     }
@@ -394,7 +394,7 @@ int till_host_remove(const char *name, int clean_remote) {
     cJSON *json = load_till_json("hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
-        fprintf(stderr, "Error: No hosts configured\n");
+        till_error("No hosts configured\n");
         return -1;
     }
     
@@ -402,7 +402,7 @@ int till_host_remove(const char *name, int clean_remote) {
     cJSON *host = cJSON_GetObjectItem(hosts, name);
     if (!host) {
         till_log(LOG_ERROR, "Host '%s' not found", name);
-        fprintf(stderr, "Error: Host '%s' not found\n", name);
+        till_error("Host '%s' not found\n", name);
         cJSON_Delete(json);
         return -1;
     }
@@ -432,7 +432,7 @@ int till_host_remove(const char *name, int clean_remote) {
     
     if (save_till_json("hosts-local.json", json) != 0) {
         till_log(LOG_ERROR, "Failed to update hosts file");
-        fprintf(stderr, "Error: Failed to update hosts file\n");
+        till_error("Failed to update hosts file\n");
         cJSON_Delete(json);
         return -1;
     }
@@ -474,7 +474,7 @@ int till_host_status(const char *name) {
         cJSON *host = cJSON_GetObjectItem(hosts, name);
         if (!host) {
             till_log(LOG_ERROR, "Host '%s' not found", name);
-            fprintf(stderr, "Error: Host '%s' not found\n", name);
+            till_error("Host '%s' not found\n", name);
             cJSON_Delete(json);
             return -1;
         }

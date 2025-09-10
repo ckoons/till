@@ -121,14 +121,13 @@ void till_log_close(void) {
 
 /* Get the Till configuration directory path */
 int get_till_dir(char *path, size_t size) {
-    struct stat st;
     char test_path[PATH_MAX];
     char real_path[PATH_MAX];
     
     /* Strategy: Find .till directory, preferring the one in till installation */
     
     /* 1. Check if .till exists in current directory (for Tekton dirs with symlinks) */
-    if (stat(TILL_DIR_NAME, &st) == 0) {
+    if (path_exists(TILL_DIR_NAME)) {
         if (realpath(TILL_DIR_NAME, real_path)) {
             strncpy(path, real_path, size - 1);
             path[size - 1] = '\0';
@@ -139,7 +138,7 @@ int get_till_dir(char *path, size_t size) {
     /* 2. Check parent directory for till/.till */
     char parent_till[PATH_MAX];
     snprintf(parent_till, sizeof(parent_till), "../till/%s", TILL_DIR_NAME);
-    if (stat(parent_till, &st) == 0) {
+    if (path_exists(parent_till)) {
         if (realpath(parent_till, real_path)) {
             strncpy(path, real_path, size - 1);
             path[size - 1] = '\0';
@@ -152,7 +151,7 @@ int get_till_dir(char *path, size_t size) {
     if (home) {
         /* Check projects/github/till/.till */
         snprintf(test_path, sizeof(test_path), "%s/%s/till/%s", home, TILL_PROJECTS_BASE, TILL_DIR_NAME);
-        if (stat(test_path, &st) == 0) {
+        if (path_exists(test_path)) {
             strncpy(path, test_path, size - 1);
             path[size - 1] = '\0';
             return 0;
@@ -176,7 +175,7 @@ int get_till_dir(char *path, size_t size) {
                 
                 /* Check for .till in parent of executable location */
                 snprintf(test_path, sizeof(test_path), "%s/../%s", exe_path, TILL_DIR_NAME);
-                if (stat(test_path, &st) == 0) {
+                if (path_exists(test_path)) {
                     if (realpath(test_path, real_path)) {
                         strncpy(path, real_path, size - 1);
                         path[size - 1] = '\0';
@@ -302,6 +301,26 @@ int save_json_file(const char *path, cJSON *json) {
     
     till_log(LOG_DEBUG, "Saved JSON to %s", path);
     return 0;
+}
+
+/* Load or create Till registry with installations object */
+cJSON* load_or_create_registry(void) {
+    cJSON *registry = load_till_json("tekton/till-private.json");
+    if (!registry) {
+        registry = cJSON_CreateObject();
+        if (!registry) return NULL;
+    }
+    
+    /* Ensure installations object exists */
+    cJSON *installations = cJSON_GetObjectItem(registry, "installations");
+    if (!installations) {
+        installations = cJSON_CreateObject();
+        if (installations) {
+            cJSON_AddItemToObject(registry, "installations", installations);
+        }
+    }
+    
+    return registry;
 }
 
 /* Load JSON file from Till directory */

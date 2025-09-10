@@ -24,17 +24,16 @@
 /* Check if path contains a Tekton installation */
 static int is_tekton_installation(const char *path) {
     char marker_path[PATH_MAX];
-    struct stat st;
     
     /* Check for .env.local (the key Tekton file) */
     snprintf(marker_path, sizeof(marker_path), "%s/.env.local", path);
-    if (stat(marker_path, &st) == 0) {
+    if (path_exists(marker_path)) {
         return 1;
     }
     
     /* Check for src/tekton.py (alternative marker) */
     snprintf(marker_path, sizeof(marker_path), "%s/src/tekton.py", path);
-    if (stat(marker_path, &st) == 0) {
+    if (path_exists(marker_path)) {
         return 1;
     }
     
@@ -107,24 +106,20 @@ int discover_tektons(void) {
     }
     
     /* Search in projects/github */
-    snprintf(search_dir, sizeof(search_dir), "%s/%s", home, TILL_PROJECTS_BASE);
+    path_join(search_dir, sizeof(search_dir), home, TILL_PROJECTS_BASE);
     
     till_log(LOG_INFO, "Discovering Tekton installations in %s", search_dir);
     printf("Discovering existing Tekton installations...\n");
     printf("Searching in TEKTON_ROOT parent: %s\n", search_dir);
     
     /* Load or create registry */
-    cJSON *registry = load_till_json("tekton/till-private.json");
+    cJSON *registry = load_or_create_registry();
     if (!registry) {
-        registry = cJSON_CreateObject();
-        cJSON_AddObjectToObject(registry, "installations");
-        cJSON_AddNumberToObject(registry, "version", 1);
+        till_error("Failed to create registry");
+        return -1;
     }
     
     cJSON *installations = cJSON_GetObjectItem(registry, "installations");
-    if (!installations) {
-        installations = cJSON_AddObjectToObject(registry, "installations");
-    }
     
     /* Scan directory */
     DIR *dir = opendir(search_dir);
@@ -141,10 +136,9 @@ int discover_tektons(void) {
         if (entry->d_name[0] == '.') continue;
         
         char full_path[PATH_MAX];
-        snprintf(full_path, sizeof(full_path), "%s/%s", search_dir, entry->d_name);
+        path_join(full_path, sizeof(full_path), search_dir, entry->d_name);
         
-        struct stat st;
-        if (stat(full_path, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+        if (!is_directory(full_path)) continue;
         
         if (is_tekton_installation(full_path)) {
             char inst_name[256];
@@ -312,17 +306,13 @@ int register_installation(const char *name, const char *path, int main_port, int
     ensure_directory(tekton_dir);
     
     /* Load or create registry */
-    cJSON *registry = load_till_json("tekton/till-private.json");
+    cJSON *registry = load_or_create_registry();
     if (!registry) {
-        registry = cJSON_CreateObject();
-        cJSON_AddObjectToObject(registry, "installations");
-        cJSON_AddNumberToObject(registry, "version", 1);
+        till_error("Failed to create registry");
+        return -1;
     }
     
     cJSON *installations = cJSON_GetObjectItem(registry, "installations");
-    if (!installations) {
-        installations = cJSON_AddObjectToObject(registry, "installations");
-    }
     
     /* Check if already exists */
     if (cJSON_GetObjectItem(installations, name)) {

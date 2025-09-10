@@ -25,13 +25,12 @@ int clone_tekton_repo(const char *path) {
     printf("Cloning Tekton repository to %s...\n", path);
     
     /* Check if directory already exists */
-    struct stat st;
-    if (stat(path, &st) == 0) {
-        if (S_ISDIR(st.st_mode)) {
+    if (path_exists(path)) {
+        if (is_directory(path)) {
             /* Check if it's already a git repo */
             char git_dir[TILL_MAX_PATH];
             snprintf(git_dir, sizeof(git_dir), "%s/.git", path);
-            if (stat(git_dir, &st) == 0) {
+            if (is_directory(git_dir)) {
                 printf("  Directory already contains a git repository\n");
                 printf("  Pulling latest changes...\n");
                 
@@ -227,25 +226,22 @@ int create_till_symlink(const char *tekton_path) {
     snprintf(symlink_path, sizeof(symlink_path), "%s/.till", tekton_path);
     
     /* Check if .till already exists */
-    struct stat st;
-    if (lstat(symlink_path, &st) == 0) {
-        if (S_ISLNK(st.st_mode)) {
-            /* It's already a symlink, check if it points to the right place */
-            char link_target[TILL_MAX_PATH];
-            ssize_t len = readlink(symlink_path, link_target, sizeof(link_target) - 1);
-            if (len > 0) {
-                link_target[len] = '\0';
-                if (strcmp(link_target, till_dir) == 0) {
-                    printf("  .till symlink already exists and is correct\n");
-                    return 0;
-                }
+    if (is_symlink(symlink_path)) {
+        /* It's already a symlink, check if it points to the right place */
+        char link_target[TILL_MAX_PATH];
+        ssize_t len = readlink(symlink_path, link_target, sizeof(link_target) - 1);
+        if (len > 0) {
+            link_target[len] = '\0';
+            if (strcmp(link_target, till_dir) == 0) {
+                printf("  .till symlink already exists and is correct\n");
+                return 0;
             }
-            /* Wrong target, remove and recreate */
-            unlink(symlink_path);
-        } else {
-            fprintf(stderr, "Warning: .till exists but is not a symlink\n");
-            return -1;
         }
+        /* Wrong target, remove and recreate */
+        unlink(symlink_path);
+    } else if (path_exists(symlink_path)) {
+        fprintf(stderr, "Warning: .till exists but is not a symlink\n");
+        return -1;
     }
     
     /* Create the symlink */

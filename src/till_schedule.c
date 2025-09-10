@@ -120,7 +120,7 @@ static void format_time(time_t t, char *buffer, size_t size) {
 int till_watch_configure(int argc, char *argv[]) {
     cJSON *schedule = load_schedule();
     if (!schedule) {
-        fprintf(stderr, "Error: Failed to load schedule configuration\n");
+        till_error("Failed to load schedule configuration\n");
         return -1;
     }
     
@@ -155,7 +155,7 @@ int till_watch_configure(int argc, char *argv[]) {
             int hour, minute;
             
             if (parse_time(time_str, &hour, &minute) != 0) {
-                fprintf(stderr, "Error: Invalid time format. Use HH:MM (24-hour)\n");
+                till_error("Invalid time format. Use HH:MM (24-hour)\n");
                 cJSON_Delete(schedule);
                 return -1;
             }
@@ -169,7 +169,7 @@ int till_watch_configure(int argc, char *argv[]) {
             /* Numeric argument - interval in hours */
             int hours = atoi(argv[i]);
             if (hours <= 0 || hours > 168) {  /* Max 1 week */
-                fprintf(stderr, "Error: Invalid interval. Must be 1-168 hours\n");
+                till_error("Invalid interval. Must be 1-168 hours\n");
                 cJSON_Delete(schedule);
                 return -1;
             }
@@ -210,7 +210,7 @@ int till_watch_configure(int argc, char *argv[]) {
     
     /* Save schedule */
     if (save_schedule(schedule) != 0) {
-        fprintf(stderr, "Error: Failed to save schedule\n");
+        till_error("Failed to save schedule\n");
         cJSON_Delete(schedule);
         return -1;
     }
@@ -535,7 +535,7 @@ int till_watch_install_cron(void) {
         cron_entry);
     
     if (system(cmd) != 0) {
-        fprintf(stderr, "Warning: Could not install cron job\n");
+        till_warn("Could not install cron job\n");
         return -1;
     }
     
