@@ -94,6 +94,11 @@ int validate_hostname(const char *hostname) {
         return 0;
     }
     
+    /* Check for double dots */
+    if (strstr(hostname, "..") != NULL) {
+        return 0;
+    }
+    
     return 1;
 }
 
@@ -251,6 +256,12 @@ int shell_quote_buf(const char *str, char *buf, size_t buf_size) {
 /* Sanitize a filename (remove dangerous characters) */
 int sanitize_filename(char *filename) {
     if (!filename) return -1;
+    
+    /* Handle empty string */
+    if (strlen(filename) == 0) {
+        strcpy(filename, "unnamed");
+        return 0;
+    }
     
     char *out = filename;
     for (char *in = filename; *in; in++) {

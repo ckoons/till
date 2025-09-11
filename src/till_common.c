@@ -371,18 +371,15 @@ cJSON* load_till_json(const char *filename) {
 /* Save JSON file to Till directory */
 int save_till_json(const char *filename, cJSON *json) {
     char path[TILL_MAX_PATH];
-    fprintf(stderr, "DEBUG: save_till_json called with filename: %s\n", filename);
     if (build_till_path(path, sizeof(path), filename) != 0) {
         till_error("Failed to build path for %s", filename);
         return -1;
     }
-    fprintf(stderr, "DEBUG: Built path: %s\n", path);
     
     /* Ensure parent directory exists */
     char *last_slash = strrchr(path, '/');
     if (last_slash) {
         *last_slash = '\0';
-        fprintf(stderr, "DEBUG: Creating directory: %s\n", path);
         if (ensure_directory(path) != 0) {
             till_error("Failed to create directory %s", path);
             *last_slash = '/';
@@ -391,10 +388,8 @@ int save_till_json(const char *filename, cJSON *json) {
         *last_slash = '/';
     }
     
-    fprintf(stderr, "DEBUG: Calling save_json_file with path: %s\n", path);
     till_debug("Saving JSON to path: %s", path);
     int result = save_json_file(path, json);
-    fprintf(stderr, "DEBUG: save_json_file returned: %d\n", result);
     return result;
 }
 

@@ -152,7 +152,7 @@ void test_filename_sanitization() {
     /* Edge cases */
     buffer[0] = '\0';
     result = sanitize_filename(buffer);
-    ASSERT(buffer[0] == '\0', "Should handle empty string");
+    ASSERT(strcmp(buffer, "unnamed") == 0, "Should handle empty string");
     
     TEST_PASS();
 }

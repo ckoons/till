@@ -211,9 +211,7 @@ int discover_tektons(void) {
     }
     
     /* Save registry */
-    fprintf(stderr, "DEBUG: Attempting to save registry with %d installations\n", found_count);
     int save_result = save_till_json("tekton/till-private.json", registry);
-    fprintf(stderr, "DEBUG: save_till_json returned %d\n", save_result);
     if (save_result == 0) {
         if (found_count > 0) {
             printf("Found %d Tekton installation(s) - registry updated\n", found_count);
