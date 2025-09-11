@@ -183,6 +183,20 @@ int cmd_watch(int argc, char *argv[]) {
 
 /* Command: install - Install Tekton or components */
 int cmd_install(int argc, char *argv[]) {
+    /* Must specify what to install */
+    if (argc < 2) {
+        till_error("Usage: till install <component> [options]");
+        till_error("Components: tekton");
+        return EXIT_USAGE_ERROR;
+    }
+    
+    /* Currently only support tekton installation */
+    if (strcmp(argv[1], "tekton") != 0) {
+        till_error("Unknown component: %s", argv[1]);
+        till_error("Valid components: tekton");
+        return EXIT_USAGE_ERROR;
+    }
+    
     install_options_t opts = {0};
     
     /* Set defaults */
@@ -198,9 +212,9 @@ int cmd_install(int argc, char *argv[]) {
         opts.tekton_main_root[sizeof(opts.tekton_main_root) - 1] = '\0';
     }
     
-    /* Parse arguments */
+    /* Parse arguments (skip "tekton" at argv[1]) */
     int has_args = 0;
-    for (int i = 1; i < argc; i++) {
+    for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
             strncpy(opts.mode, argv[++i], sizeof(opts.mode) - 1);
             has_args = 1;
@@ -239,7 +253,7 @@ int cmd_install(int argc, char *argv[]) {
         }
     }
     
-    /* Interactive mode - prompt for missing options */
+    /* Interactive mode - prompt for installation options */
     if (g_interactive && !has_args) {
         printf("\nTekton Interactive Installation\n");
         printf("================================\n\n");
