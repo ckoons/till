@@ -19,6 +19,7 @@
 
 #include "till_config.h"
 #include "till_common.h"
+#include "till_platform.h"
 #include "cJSON.h"
 
 #ifndef PATH_MAX
@@ -362,80 +363,28 @@ int json_set_bool(cJSON *obj, const char *key, int value) {
     return 0;
 }
 
-/* Process utilities */
+/* Process utilities - wrapper for platform abstraction */
 int find_process_by_port(int port, process_info_t *info) {
-    char cmd[256];
-    char line[1024];
+    platform_process_info_t plat_info;
+    int pid = platform_find_process_by_port(port, &plat_info);
     
-    /* Use lsof to find process using port */
-    snprintf(cmd, sizeof(cmd), "lsof -i :%d 2>/dev/null | grep LISTEN", port);
-    
-    FILE *fp = popen(cmd, "r");
-    if (!fp) return -1;
-    
-    if (fgets(line, sizeof(line), fp)) {
-        /* Parse lsof output */
-        char proc_name[256];
-        int pid;
-        
-        if (sscanf(line, "%255s %d", proc_name, &pid) == 2) {
-            if (info) {
-                info->pid = pid;
-                strncpy(info->name, proc_name, sizeof(info->name) - 1);
-                info->name[sizeof(info->name) - 1] = '\0';
-                
-                /* Try to get full command line */
-                snprintf(cmd, sizeof(cmd), "ps -p %d -o command= 2>/dev/null", pid);
-                FILE *ps = popen(cmd, "r");
-                if (ps) {
-                    if (fgets(info->cmd, sizeof(info->cmd), ps)) {
-                        /* Remove trailing newline */
-                        size_t len = strlen(info->cmd);
-                        if (len > 0 && info->cmd[len - 1] == '\n') {
-                            info->cmd[len - 1] = '\0';
-                        }
-                    }
-                    pclose(ps);
-                }
-            }
-            
-            pclose(fp);
-            return pid;
-        }
+    if (pid > 0 && info) {
+        info->pid = plat_info.pid;
+        strncpy(info->name, plat_info.name, sizeof(info->name) - 1);
+        info->name[sizeof(info->name) - 1] = '\0';
+        strncpy(info->cmd, plat_info.command, sizeof(info->cmd) - 1);
+        info->cmd[sizeof(info->cmd) - 1] = '\0';
     }
     
-    pclose(fp);
-    return 0;
+    return pid;
 }
 
 int kill_process_graceful(int pid, int timeout_ms) {
-    if (pid <= 0) return -1;
-    
-    /* First try SIGTERM */
-    if (kill(pid, SIGTERM) != 0) {
-        return -1;
-    }
-    
-    /* Wait for process to exit */
-    int wait_ms = 0;
-    while (wait_ms < timeout_ms) {
-        if (kill(pid, 0) != 0) {
-            /* Process no longer exists */
-            return 0;
-        }
-        
-        usleep(100 * 1000);  /* Sleep 100ms */
-        wait_ms += 100;
-    }
-    
-    /* Timeout reached, use SIGKILL */
-    kill(pid, SIGKILL);
-    return 0;
+    return platform_kill_process(pid, timeout_ms);
 }
 
 int is_port_available(int port) {
-    process_info_t info;
-    return (find_process_by_port(port, &info) == 0);
+    return platform_is_port_available(port);
 }
 
 int find_available_port(int start, int end) {
