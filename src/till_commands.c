@@ -244,80 +244,117 @@ int cmd_install(int argc, char *argv[]) {
         printf("\nTekton Interactive Installation\n");
         printf("================================\n\n");
         
-        /* Prompt for mode */
-        printf("Installation mode:\n");
-        printf("  1. solo     - Standalone installation\n");
-        printf("  2. observer - Read-only federation member\n");
-        printf("  3. member   - Full federation member\n");
-        printf("  4. coder-a  - Development environment A\n");
-        printf("  5. coder-b  - Development environment B\n");
-        printf("  6. coder-c  - Development environment C\n");
-        printf("\nSelect mode [1-6] (default: 1): ");
-        
-        char choice[10];
-        if (fgets(choice, sizeof(choice), stdin)) {
-            int mode_choice = atoi(choice);
-            switch (mode_choice) {
-                case 2: strncpy(opts.mode, MODE_OBSERVER, sizeof(opts.mode) - 1); break;
-                case 3: strncpy(opts.mode, MODE_MEMBER, sizeof(opts.mode) - 1); break;
-                case 4: strncpy(opts.mode, "coder-a", sizeof(opts.mode) - 1); break;
-                case 5: strncpy(opts.mode, "coder-b", sizeof(opts.mode) - 1); break;
-                case 6: strncpy(opts.mode, "coder-c", sizeof(opts.mode) - 1); break;
-                default: strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1); break;
+        /* Find highest port and lowest AI port in use */
+        int highest_port = 0;
+        int lowest_ai_port = 50000;  /* Start high */
+        cJSON *registry = load_till_json("tekton/till-private.json");
+        if (registry) {
+            cJSON *installations = cJSON_GetObjectItem(registry, "installations");
+            if (installations) {
+                cJSON *inst;
+                cJSON_ArrayForEach(inst, installations) {
+                    cJSON *port_item = cJSON_GetObjectItem(inst, "port_base");
+                    cJSON *ai_port_item = cJSON_GetObjectItem(inst, "ai_port_base");
+                    int port = port_item ? cJSON_GetNumberValue(port_item) : 0;
+                    int ai_port = ai_port_item ? cJSON_GetNumberValue(ai_port_item) : 0;
+                    if (port > highest_port) highest_port = port;
+                    if (ai_port < lowest_ai_port && ai_port > 0) lowest_ai_port = ai_port;
+                }
             }
+            cJSON_Delete(registry);
         }
         
-        /* Prompt for name */
-        printf("\nInstallation name (e.g., 'primary', 'coder-a'): ");
+        /* Calculate default ports */
+        int default_port = highest_port > 0 ? highest_port + 100 : DEFAULT_PORT_BASE;
+        int default_ai_port = lowest_ai_port < 50000 ? lowest_ai_port - 100 : DEFAULT_AI_PORT_BASE;
+        
+        /* 1. Prompt for Name */
+        char default_name[256] = "tekton-solo";
+        printf("Name [%s]: ", default_name);
         char name_input[256];
         if (fgets(name_input, sizeof(name_input), stdin)) {
             name_input[strcspn(name_input, "\n")] = 0;  /* Remove newline */
             if (strlen(name_input) > 0) {
                 strncpy(opts.name, name_input, sizeof(opts.name) - 1);
+            } else {
+                strncpy(opts.name, default_name, sizeof(opts.name) - 1);
             }
+        } else {
+            strncpy(opts.name, default_name, sizeof(opts.name) - 1);
         }
         
-        /* Prompt for path */
+        /* 2. Prompt for Path */
         char *home = getenv("HOME");
         char default_path[TILL_MAX_PATH];
         snprintf(default_path, sizeof(default_path), "%s/%s/%s",
-                home, TILL_PROJECTS_BASE,
-                strlen(opts.name) > 0 ? opts.name : "tekton");
+                home, TILL_PROJECTS_BASE, opts.name);
         
-        printf("\nInstallation path (default: %s): ", default_path);
+        printf("Path [%s]: ", default_path);
         char path_input[TILL_MAX_PATH];
         if (fgets(path_input, sizeof(path_input), stdin)) {
             path_input[strcspn(path_input, "\n")] = 0;  /* Remove newline */
             if (strlen(path_input) > 0) {
                 strncpy(opts.path, path_input, sizeof(opts.path) - 1);
+            } else {
+                strncpy(opts.path, default_path, sizeof(opts.path) - 1);
             }
+        } else {
+            strncpy(opts.path, default_path, sizeof(opts.path) - 1);
         }
         
-        /* Prompt for ports */
-        printf("\nBase port for services (default: %d): ", DEFAULT_PORT_BASE);
+        /* 3. Prompt for Federation Mode */
+        printf("Federation Mode (solo/observer/member) [solo]: ");
+        char mode_input[32];
+        if (fgets(mode_input, sizeof(mode_input), stdin)) {
+            mode_input[strcspn(mode_input, "\n")] = 0;  /* Remove newline */
+            if (strcmp(mode_input, "observer") == 0) {
+                strncpy(opts.mode, MODE_OBSERVER, sizeof(opts.mode) - 1);
+            } else if (strcmp(mode_input, "member") == 0) {
+                strncpy(opts.mode, MODE_MEMBER, sizeof(opts.mode) - 1);
+            } else if (strlen(mode_input) == 0 || strcmp(mode_input, "solo") == 0) {
+                strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1);
+            } else {
+                /* Allow coder-a, coder-b, coder-c as well */
+                strncpy(opts.mode, mode_input, sizeof(opts.mode) - 1);
+            }
+        } else {
+            strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1);
+        }
+        
+        /* 4. Prompt for Component Starting Port */
+        printf("Component Starting Port [%d]: ", default_port);
         char port_input[32];
         if (fgets(port_input, sizeof(port_input), stdin)) {
             int port = atoi(port_input);
             if (port > 0) {
                 opts.port_base = port;
+            } else {
+                opts.port_base = default_port;
             }
+        } else {
+            opts.port_base = default_port;
         }
         
-        printf("Base port for AI services (default: %d): ", DEFAULT_AI_PORT_BASE);
+        /* 5. Prompt for CI Starting Port */
+        printf("CI Starting Port [%d]: ", default_ai_port);
         if (fgets(port_input, sizeof(port_input), stdin)) {
             int port = atoi(port_input);
             if (port > 0) {
                 opts.ai_port_base = port;
+            } else {
+                opts.ai_port_base = default_ai_port;
             }
+        } else {
+            opts.ai_port_base = default_ai_port;
         }
         
         /* Show summary */
         printf("\nInstallation Summary:\n");
+        printf("  Name: %s\n", opts.name);
+        printf("  Path: %s\n", opts.path);
         printf("  Mode: %s\n", opts.mode);
-        printf("  Name: %s\n", strlen(opts.name) > 0 ? opts.name : "(auto-generated)");
-        printf("  Path: %s\n", strlen(opts.path) > 0 ? opts.path : default_path);
-        printf("  Port Base: %d\n", opts.port_base);
-        printf("  AI Port Base: %d\n", opts.ai_port_base);
+        printf("  Component Port Base: %d\n", opts.port_base);
+        printf("  CI Port Base: %d\n", opts.ai_port_base);
         printf("\nProceed with installation? [Y/n]: ");
         
         char confirm[10];
