@@ -46,8 +46,8 @@ static int install_launchd(const schedule_config_t *config) {
     struct passwd *pw = getpwuid(getuid());
     if (!pw) return -1;
     
-    char plist_dir[PATH_MAX];
-    char plist_path[PATH_MAX];
+    char plist_dir[TILL_MAX_PATH];
+    char plist_path[TILL_MAX_PATH];
     
     if (config->user_level) {
         snprintf(plist_dir, sizeof(plist_dir), 
@@ -58,7 +58,7 @@ static int install_launchd(const schedule_config_t *config) {
     }
     
     /* Create directory if needed */
-    platform_mkdir_p(plist_dir, 0755);
+    platform_mkdir_p(plist_dir, TILL_DIR_PERMS);
     
     snprintf(plist_path, sizeof(plist_path), 
             "%s/com.till.%s.plist", plist_dir, config->name);
@@ -125,7 +125,7 @@ static int install_launchd(const schedule_config_t *config) {
     fclose(fp);
     
     /* Load the plist */
-    char cmd[PATH_MAX * 2];
+    char cmd[TILL_MAX_PATH * 2];
     snprintf(cmd, sizeof(cmd), 
             "launchctl unload '%s' 2>/dev/null; launchctl load '%s'",
             plist_path, plist_path);
@@ -137,8 +137,8 @@ static int remove_launchd(const char *name) {
     struct passwd *pw = getpwuid(getuid());
     if (!pw) return -1;
     
-    char plist_path[PATH_MAX];
-    char cmd[PATH_MAX * 2];
+    char plist_path[TILL_MAX_PATH];
+    char cmd[TILL_MAX_PATH * 2];
     
     /* Try user level first */
     snprintf(plist_path, sizeof(plist_path), 
@@ -173,9 +173,9 @@ static int install_systemd(const schedule_config_t *config) {
     struct passwd *pw = getpwuid(getuid());
     if (!pw) return -1;
     
-    char service_dir[PATH_MAX];
-    char service_path[PATH_MAX];
-    char timer_path[PATH_MAX];
+    char service_dir[TILL_MAX_PATH];
+    char service_path[TILL_MAX_PATH];
+    char timer_path[TILL_MAX_PATH];
     
     if (config->user_level) {
         snprintf(service_dir, sizeof(service_dir), 
@@ -186,7 +186,7 @@ static int install_systemd(const schedule_config_t *config) {
     }
     
     /* Create directory if needed */
-    platform_mkdir_p(service_dir, 0755);
+    platform_mkdir_p(service_dir, TILL_DIR_PERMS);
     
     /* Write service file */
     snprintf(service_path, sizeof(service_path), 
@@ -247,7 +247,7 @@ static int install_systemd(const schedule_config_t *config) {
     fclose(fp);
     
     /* Enable and start timer */
-    char cmd[PATH_MAX];
+    char cmd[TILL_MAX_PATH];
     const char *ctl = config->user_level ? "systemctl --user" : "systemctl";
     
     snprintf(cmd, sizeof(cmd), "%s daemon-reload", ctl);
@@ -261,7 +261,7 @@ static int install_systemd(const schedule_config_t *config) {
 }
 
 static int remove_systemd(const char *name) {
-    char cmd[PATH_MAX];
+    char cmd[TILL_MAX_PATH];
     
     /* Try user level first */
     snprintf(cmd, sizeof(cmd), "systemctl --user stop till-%s.timer 2>/dev/null", name);
@@ -271,7 +271,7 @@ static int remove_systemd(const char *name) {
         
         struct passwd *pw = getpwuid(getuid());
         if (pw) {
-            char path[PATH_MAX];
+            char path[TILL_MAX_PATH];
             snprintf(path, sizeof(path), 
                     "%s/.config/systemd/user/till-%s.service", pw->pw_dir, name);
             unlink(path);
@@ -288,7 +288,7 @@ static int remove_systemd(const char *name) {
         snprintf(cmd, sizeof(cmd), "sudo systemctl disable till-%s.timer", name);
         system(cmd);
         
-        char path[PATH_MAX];
+        char path[TILL_MAX_PATH];
         snprintf(path, sizeof(path), "/etc/systemd/system/till-%s.service", name);
         snprintf(cmd, sizeof(cmd), "sudo rm '%s'", path);
         system(cmd);
@@ -306,8 +306,8 @@ static int remove_systemd(const char *name) {
 
 /* Install cron job (fallback) */
 static int install_cron(const schedule_config_t *config) {
-    char cron_line[PATH_MAX * 2];
-    char cmd[PATH_MAX * 3];
+    char cron_line[TILL_MAX_PATH * 2];
+    char cmd[TILL_MAX_PATH * 3];
     
     /* Build cron schedule */
     const char *schedule = "0 3 * * *";  /* Default: 3 AM daily */
@@ -359,7 +359,7 @@ static int install_cron(const schedule_config_t *config) {
 }
 
 static int remove_cron(const char *name) {
-    char cmd[PATH_MAX];
+    char cmd[TILL_MAX_PATH];
     snprintf(cmd, sizeof(cmd), 
             "crontab -l 2>/dev/null | grep -v 'till-%s' | crontab -",
             name);
@@ -417,7 +417,7 @@ int platform_schedule_exists(const char *name) {
     if (!name) return 0;
     
     scheduler_type_t scheduler = platform_get_scheduler();
-    char cmd[PATH_MAX];
+    char cmd[TILL_MAX_PATH];
     
     switch (scheduler) {
 #if PLATFORM_MACOS
@@ -425,7 +425,7 @@ int platform_schedule_exists(const char *name) {
             struct passwd *pw = getpwuid(getuid());
             if (!pw) return 0;
             
-            char plist_path[PATH_MAX];
+            char plist_path[TILL_MAX_PATH];
             snprintf(plist_path, sizeof(plist_path), 
                     "%s/Library/LaunchAgents/com.till.%s.plist", pw->pw_dir, name);
             

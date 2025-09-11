@@ -22,8 +22,8 @@
 #include "till_platform.h"
 #include "cJSON.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
+#ifndef TILL_MAX_PATH
+#define TILL_MAX_PATH 4096
 #endif
 
 /* External log function from till_common.c */
@@ -170,7 +170,7 @@ int path_make_absolute(char *dest, size_t size, const char *path) {
     }
     
     /* Try realpath first */
-    char resolved[PATH_MAX];
+    char resolved[TILL_MAX_PATH];
     if (realpath(path, resolved) != NULL) {
         strncpy(dest, resolved, size - 1);
         dest[size - 1] = '\0';
@@ -178,7 +178,7 @@ int path_make_absolute(char *dest, size_t size, const char *path) {
     }
     
     /* If realpath fails, construct manually */
-    char cwd[PATH_MAX];
+    char cwd[TILL_MAX_PATH];
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
         return -1;
     }
@@ -417,7 +417,7 @@ int foreach_dir_entry(const char *path, dir_entry_fn callback, void *context) {
             continue;
         }
         
-        char full_path[PATH_MAX];
+        char full_path[TILL_MAX_PATH];
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
         
         int result = callback(full_path, entry->d_name, context);
@@ -442,7 +442,7 @@ int create_or_update_symlink(const char *target, const char *link_path) {
     if (lstat(link_path, &st) == 0) {
         if (S_ISLNK(st.st_mode)) {
             /* It's a symlink, check if it points to the right place */
-            char current_target[PATH_MAX];
+            char current_target[TILL_MAX_PATH];
             ssize_t len = readlink(link_path, current_target, sizeof(current_target) - 1);
             
             if (len > 0) {
@@ -481,7 +481,7 @@ int symlink_points_to(const char *link_path, const char *expected_target) {
         return 0;
     }
     
-    char actual_target[PATH_MAX];
+    char actual_target[TILL_MAX_PATH];
     ssize_t len = readlink(link_path, actual_target, sizeof(actual_target) - 1);
     
     if (len <= 0) {

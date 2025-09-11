@@ -19,8 +19,8 @@
 #include "till_common.h"
 #include "cJSON.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
+#ifndef TILL_MAX_PATH
+#define TILL_MAX_PATH 4096
 #endif
 
 
@@ -326,7 +326,7 @@ int till_watch_install_launchd(void) {
     struct passwd *pw = getpwuid(getuid());
     if (!pw) return -1;
     
-    char plist_path[PATH_MAX];
+    char plist_path[TILL_MAX_PATH];
     snprintf(plist_path, sizeof(plist_path), 
         "%s/Library/LaunchAgents/com.till.sync.plist", pw->pw_dir);
     
@@ -345,13 +345,13 @@ int till_watch_install_launchd(void) {
     cJSON_Delete(schedule);
     
     /* Find till executable */
-    char till_path[PATH_MAX];
+    char till_path[TILL_MAX_PATH];
     if (access("/usr/local/bin/till", X_OK) == 0) {
         strncpy(till_path, "/usr/local/bin/till", sizeof(till_path) - 1);
         till_path[sizeof(till_path) - 1] = '\0';
     } else {
         /* Use current location */
-        char cwd[PATH_MAX];
+        char cwd[TILL_MAX_PATH];
         if (getcwd(cwd, sizeof(cwd)) == NULL) return -1;
         snprintf(till_path, sizeof(till_path), "%s/till", cwd);
     }
@@ -380,7 +380,7 @@ int till_watch_install_launchd(void) {
     fprintf(fp, "        <integer>%d</integer>\n", minute);
     fprintf(fp, "    </dict>\n");
     fprintf(fp, "    <key>StandardOutPath</key>\n");
-    char till_dir[PATH_MAX];
+    char till_dir[TILL_MAX_PATH];
     get_till_dir(till_dir, sizeof(till_dir));
     fprintf(fp, "    <string>%s/logs/sync.log</string>\n", till_dir);
     fprintf(fp, "    <key>StandardErrorPath</key>\n");
@@ -391,7 +391,7 @@ int till_watch_install_launchd(void) {
     fclose(fp);
     
     /* Load the plist */
-    char cmd[PATH_MAX * 2];
+    char cmd[TILL_MAX_PATH * 2];
     snprintf(cmd, sizeof(cmd), "launchctl unload %s 2>/dev/null; launchctl load %s",
         plist_path, plist_path);
     
@@ -413,12 +413,12 @@ int till_watch_install_systemd(void) {
         return till_watch_install_cron();
     }
     
-    char service_dir[PATH_MAX];
+    char service_dir[TILL_MAX_PATH];
     snprintf(service_dir, sizeof(service_dir), 
         "%s/.config/systemd/user", pw->pw_dir);
     
     /* Create directory if needed */
-    char cmd[PATH_MAX];
+    char cmd[TILL_MAX_PATH];
     snprintf(cmd, sizeof(cmd), "mkdir -p %s", service_dir);
     if (system(cmd) != 0) {
         till_error("Failed to create systemd directory");
@@ -440,18 +440,18 @@ int till_watch_install_systemd(void) {
     cJSON_Delete(schedule);
     
     /* Find till executable */
-    char till_path[PATH_MAX];
+    char till_path[TILL_MAX_PATH];
     if (access("/usr/local/bin/till", X_OK) == 0) {
         strncpy(till_path, "/usr/local/bin/till", sizeof(till_path) - 1);
         till_path[sizeof(till_path) - 1] = '\0';
     } else {
-        char cwd[PATH_MAX];
+        char cwd[TILL_MAX_PATH];
         if (getcwd(cwd, sizeof(cwd)) == NULL) return -1;
         snprintf(till_path, sizeof(till_path), "%s/till", cwd);
     }
     
     /* Write service file */
-    char service_path[PATH_MAX];
+    char service_path[TILL_MAX_PATH];
     snprintf(service_path, sizeof(service_path), 
         "%s/till-sync.service", service_dir);
     
@@ -463,7 +463,7 @@ int till_watch_install_systemd(void) {
     fprintf(fp, "[Service]\n");
     fprintf(fp, "Type=oneshot\n");
     fprintf(fp, "ExecStart=%s sync\n", till_path);
-    char till_dir[PATH_MAX];
+    char till_dir[TILL_MAX_PATH];
     get_till_dir(till_dir, sizeof(till_dir));
     fprintf(fp, "StandardOutput=append:%s/logs/sync.log\n", till_dir);
     fprintf(fp, "StandardError=append:%s/logs/sync.error.log\n", till_dir);
@@ -471,7 +471,7 @@ int till_watch_install_systemd(void) {
     fclose(fp);
     
     /* Write timer file */
-    char timer_path[PATH_MAX];
+    char timer_path[TILL_MAX_PATH];
     snprintf(timer_path, sizeof(timer_path), 
         "%s/till-sync.timer", service_dir);
     
@@ -523,27 +523,27 @@ int till_watch_install_cron(void) {
     cJSON_Delete(schedule);
     
     /* Find till executable */
-    char till_path[PATH_MAX];
+    char till_path[TILL_MAX_PATH];
     if (access("/usr/local/bin/till", X_OK) == 0) {
         strncpy(till_path, "/usr/local/bin/till", sizeof(till_path) - 1);
         till_path[sizeof(till_path) - 1] = '\0';
     } else {
-        char cwd[PATH_MAX];
+        char cwd[TILL_MAX_PATH];
         if (getcwd(cwd, sizeof(cwd)) == NULL) return -1;
         snprintf(till_path, sizeof(till_path), "%s/till", cwd);
     }
     
     /* Create cron entry */
-    char till_dir[PATH_MAX];
+    char till_dir[TILL_MAX_PATH];
     get_till_dir(till_dir, sizeof(till_dir));
     
-    char cron_entry[PATH_MAX * 2];
+    char cron_entry[TILL_MAX_PATH * 2];
     snprintf(cron_entry, sizeof(cron_entry),
         "%d %d * * * %s sync >> %s/logs/cron.log 2>&1",
         minute, hour, till_path, till_dir);
     
     /* Add to crontab */
-    char cmd[PATH_MAX * 3];
+    char cmd[TILL_MAX_PATH * 3];
     snprintf(cmd, sizeof(cmd),
         "(crontab -l 2>/dev/null | grep -v 'till sync'; echo '%s') | crontab -",
         cron_entry);

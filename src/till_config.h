@@ -131,6 +131,21 @@
 #define TILL_DEBUG 0
 #endif
 
+/* File Permissions */
+#define TILL_DIR_PERMS 0755        /* Standard directory permissions */
+#define TILL_FILE_PERMS 0644        /* Standard file permissions */
+#define TILL_SECURE_DIR_PERMS 0700  /* Secure directory (e.g., .ssh) */
+#define TILL_SECURE_FILE_PERMS 0600 /* Secure file permissions */
+
+/* Logging Configuration */
+#define TILL_LOG_FILE_PREFIX "till_"
+#define TILL_LOG_DATE_FORMAT "%Y%m%d"
+#define TILL_LOG_TIMESTAMP_FORMAT "%Y-%m-%d %H:%M:%S"
+
+/* SSH Configuration */
+#define TILL_SSH_DIR ".ssh"
+#define TILL_SSH_CONFIG "config"
+
 /* Platform Detection */
 #ifdef __APPLE__
 #define PLATFORM_MAC 1

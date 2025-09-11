@@ -242,7 +242,7 @@ static int create_directory(const char *path) {
     struct stat st = {0};
     
     if (stat(path, &st) == -1) {
-        if (mkdir(path, 0755) != 0) {
+        if (mkdir(path, TILL_DIR_PERMS) != 0) {
             if (errno != EEXIST) {
                 till_error("Creating directory %s: %s", 
                         path, strerror(errno));

@@ -17,13 +17,13 @@
 #include "till_common.h"
 #include "cJSON.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
+#ifndef TILL_MAX_PATH
+#define TILL_MAX_PATH 4096
 #endif
 
 /* Check if path contains a Tekton installation */
 static int is_tekton_installation(const char *path) {
-    char marker_path[PATH_MAX];
+    char marker_path[TILL_MAX_PATH];
     
     /* Check for .env.local (the key Tekton file) */
     snprintf(marker_path, sizeof(marker_path), "%s/.env.local", path);
@@ -42,7 +42,7 @@ static int is_tekton_installation(const char *path) {
 
 /* Extract installation name from .env.local */
 static int get_installation_name(const char *path, char *name, size_t size) {
-    char env_path[PATH_MAX];
+    char env_path[TILL_MAX_PATH];
     FILE *fp;
     char line[512];
     
@@ -80,7 +80,7 @@ static int get_installation_name(const char *path, char *name, size_t size) {
 
 /* Extract port bases from .env.local */
 static int get_installation_ports(const char *path, int *main_port, int *ai_port) {
-    char env_path[PATH_MAX];
+    char env_path[TILL_MAX_PATH];
     FILE *fp;
     char line[512];
     
@@ -105,7 +105,7 @@ static int get_installation_ports(const char *path, int *main_port, int *ai_port
 
 /* Discover Tekton installations in a directory */
 int discover_tektons(void) {
-    char search_dir[PATH_MAX];
+    char search_dir[TILL_MAX_PATH];
     char *home = getenv("HOME");
     
     if (!home) {
@@ -143,7 +143,7 @@ int discover_tektons(void) {
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.') continue;
         
-        char full_path[PATH_MAX];
+        char full_path[TILL_MAX_PATH];
         path_join(full_path, sizeof(full_path), search_dir, entry->d_name);
         
         if (!is_directory(full_path)) continue;
@@ -159,7 +159,7 @@ int discover_tektons(void) {
                     cJSON_AddStringToObject(inst, "root", full_path);
                     
                     /* Try to get main_root */
-                    char main_root[PATH_MAX];
+                    char main_root[TILL_MAX_PATH];
                     if (strstr(inst_name, "coder-")) {
                         snprintf(main_root, sizeof(main_root), "%s/Tekton", search_dir);
                     } else {
@@ -308,7 +308,7 @@ int get_primary_tekton_name(char *name, size_t size) {
 /* Register a new Tekton installation */
 int register_installation(const char *name, const char *path, int main_port, int ai_port, const char *mode) {
     /* Ensure tekton directory exists */
-    char tekton_dir[PATH_MAX];
+    char tekton_dir[TILL_MAX_PATH];
     if (build_till_path(tekton_dir, sizeof(tekton_dir), "tekton") != 0) {
         return -1;
     }
@@ -329,7 +329,7 @@ int register_installation(const char *name, const char *path, int main_port, int
     }
     
     /* Determine main_root */
-    char main_root[PATH_MAX];
+    char main_root[TILL_MAX_PATH];
     if (strstr(name, "coder-")) {
         /* For Coder instances, main_root is the primary Tekton */
         if (get_primary_tekton_path(main_root, sizeof(main_root)) != 0) {

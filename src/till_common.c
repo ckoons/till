@@ -17,26 +17,22 @@
 #include "till_common.h"
 #include "cJSON.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
-
 static FILE *log_file = NULL;
 static int log_level = LOG_INFO;
 
 /* Initialize logging */
 int till_log_init(void) {
-    char log_path[PATH_MAX];
-    char till_dir[PATH_MAX];
+    char log_path[TILL_MAX_PATH];
+    char till_dir[TILL_MAX_PATH];
     
     if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
         return -1;
     }
     
     /* Create logs directory */
-    char log_dir[PATH_MAX];
+    char log_dir[TILL_MAX_PATH];
     snprintf(log_dir, sizeof(log_dir), "%s/logs", till_dir);
-    mkdir(log_dir, 0755);
+    mkdir(log_dir, TILL_DIR_PERMS);
     
     /* Open log file with timestamp */
     time_t now = time(NULL);
@@ -121,8 +117,8 @@ void till_log_close(void) {
 
 /* Get the Till configuration directory path */
 int get_till_dir(char *path, size_t size) {
-    char test_path[PATH_MAX];
-    char real_path[PATH_MAX];
+    char test_path[TILL_MAX_PATH];
+    char real_path[TILL_MAX_PATH];
     
     /* Strategy: Find .till directory, preferring the one in till installation */
     
@@ -136,7 +132,7 @@ int get_till_dir(char *path, size_t size) {
     }
     
     /* 2. Check parent directory for till/.till */
-    char parent_till[PATH_MAX];
+    char parent_till[TILL_MAX_PATH];
     snprintf(parent_till, sizeof(parent_till), "../till/%s", TILL_DIR_NAME);
     if (path_exists(parent_till)) {
         if (realpath(parent_till, real_path)) {
@@ -169,7 +165,7 @@ int get_till_dir(char *path, size_t size) {
     /* 4. Try to find via the till executable */
     FILE *fp = popen("which till 2>/dev/null", "r");
     if (fp) {
-        char exe_path[PATH_MAX];
+        char exe_path[TILL_MAX_PATH];
         if (fgets(exe_path, sizeof(exe_path), fp) != NULL) {
             exe_path[strcspn(exe_path, "\n")] = '\0';
             pclose(fp);
@@ -206,7 +202,7 @@ int get_till_dir(char *path, size_t size) {
 
 /* Build a path within Till directory */
 int build_till_path(char *dest, size_t size, const char *filename) {
-    char till_dir[PATH_MAX];
+    char till_dir[TILL_MAX_PATH];
     if (get_till_dir(till_dir, sizeof(till_dir)) != 0) {
         return -1;
     }
@@ -217,7 +213,7 @@ int build_till_path(char *dest, size_t size, const char *filename) {
 
 /* Ensure directory exists (with parents) */
 int ensure_directory(const char *path) {
-    char tmp[PATH_MAX];
+    char tmp[TILL_MAX_PATH];
     char *p = NULL;
     size_t len;
     
@@ -231,7 +227,7 @@ int ensure_directory(const char *path) {
     for (p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = 0;
-            if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+            if (mkdir(tmp, TILL_DIR_PERMS) != 0 && errno != EEXIST) {
                 till_log(LOG_ERROR, "Cannot create directory %s: %s", tmp, strerror(errno));
                 return -1;
             }
@@ -239,7 +235,7 @@ int ensure_directory(const char *path) {
         }
     }
     
-    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+    if (mkdir(tmp, TILL_DIR_PERMS) != 0 && errno != EEXIST) {
         till_log(LOG_ERROR, "Cannot create directory %s: %s", tmp, strerror(errno));
         return -1;
     }
@@ -342,7 +338,7 @@ cJSON* load_or_create_registry(void) {
 
 /* Load JSON file from Till directory */
 cJSON* load_till_json(const char *filename) {
-    char path[PATH_MAX];
+    char path[TILL_MAX_PATH];
     if (build_till_path(path, sizeof(path), filename) != 0) {
         return NULL;
     }
@@ -351,7 +347,7 @@ cJSON* load_till_json(const char *filename) {
 
 /* Save JSON file to Till directory */
 int save_till_json(const char *filename, cJSON *json) {
-    char path[PATH_MAX];
+    char path[TILL_MAX_PATH];
     fprintf(stderr, "DEBUG: save_till_json called with filename: %s\n", filename);
     if (build_till_path(path, sizeof(path), filename) != 0) {
         till_error("Failed to build path for %s", filename);
@@ -430,17 +426,17 @@ int run_command_timeout(const char *cmd, int timeout_seconds, char *output, size
 
 /* Add SSH config entry */
 int add_ssh_config_entry(const char *name, const char *user, const char *host, int port) {
-    char ssh_config[PATH_MAX];
+    char ssh_config[TILL_MAX_PATH];
     if (build_till_path(ssh_config, sizeof(ssh_config), "ssh/config") != 0) {
         return -1;
     }
     
     /* Ensure SSH directory exists */
-    char ssh_dir[PATH_MAX];
+    char ssh_dir[TILL_MAX_PATH];
     if (build_till_path(ssh_dir, sizeof(ssh_dir), "ssh") != 0) {
         return -1;
     }
-    mkdir(ssh_dir, 0700);
+    mkdir(ssh_dir, TILL_SECURE_DIR_PERMS);
     
     FILE *fp = fopen(ssh_config, "a");
     if (!fp) {
@@ -464,8 +460,8 @@ int add_ssh_config_entry(const char *name, const char *user, const char *host, i
 
 /* Remove SSH config entry */
 int remove_ssh_config_entry(const char *name) {
-    char ssh_config[PATH_MAX];
-    char ssh_config_tmp[PATH_MAX];
+    char ssh_config[TILL_MAX_PATH];
+    char ssh_config_tmp[TILL_MAX_PATH];
     
     if (build_till_path(ssh_config, sizeof(ssh_config), "ssh/config") != 0) {
         return -1;

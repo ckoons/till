@@ -21,14 +21,14 @@
 #include "till_common.h"
 #include "cJSON.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
+#ifndef TILL_MAX_PATH
+#define TILL_MAX_PATH 4096
 #endif
 
 /* Component structure */
 typedef struct {
     char name[256];
-    char root[PATH_MAX];
+    char root[TILL_MAX_PATH];
     char registry_name[256];
     int has_commands;
 } component_t;
@@ -62,7 +62,7 @@ static void extract_component_name(const char *registry_name, char *component) {
 
 /* Check if component has TILL_COMMANDS_DIR directory */
 static int has_command_directory(const char *root) {
-    char cmd_dir[PATH_MAX];
+    char cmd_dir[TILL_MAX_PATH];
     snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
     
     return is_directory(cmd_dir);
@@ -70,7 +70,7 @@ static int has_command_directory(const char *root) {
 
 /* List available commands for a component */
 static int list_component_commands(const char *component, const char *root) {
-    char cmd_dir[PATH_MAX];
+    char cmd_dir[TILL_MAX_PATH];
     snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
     
     DIR *dir = opendir(cmd_dir);
@@ -84,7 +84,7 @@ static int list_component_commands(const char *component, const char *root) {
     int count = 0;
     while ((entry = readdir(dir))) {
         if (entry->d_name[0] != '.') {
-            char cmd_path[PATH_MAX];
+            char cmd_path[TILL_MAX_PATH];
             snprintf(cmd_path, sizeof(cmd_path), "%s/%s", cmd_dir, entry->d_name);
             
             if (is_executable(cmd_path)) {
@@ -175,7 +175,7 @@ static int list_all_components(void) {
 
 /* Find component root by name or registry name */
 static char *find_component_root(const char *component_name) {
-    static char root[PATH_MAX];
+    static char root[TILL_MAX_PATH];
     
     cJSON *json = load_installations();
     if (!json) {
@@ -195,8 +195,8 @@ static char *find_component_root(const char *component_name) {
         if (strcmp(component_name, registry_name) == 0) {
             cJSON *root_item = cJSON_GetObjectItem(installation, "root");
             if (root_item && cJSON_IsString(root_item)) {
-                strncpy(root, root_item->valuestring, PATH_MAX - 1);
-                root[PATH_MAX - 1] = '\0';
+                strncpy(root, root_item->valuestring, TILL_MAX_PATH - 1);
+                root[TILL_MAX_PATH - 1] = '\0';
                 cJSON_Delete(json);
                 return root;
             }
@@ -215,8 +215,8 @@ static char *find_component_root(const char *component_name) {
             if (strstr(registry_name, "primary")) {
                 cJSON *root_item = cJSON_GetObjectItem(installation, "root");
                 if (root_item && cJSON_IsString(root_item)) {
-                    strncpy(root, root_item->valuestring, PATH_MAX - 1);
-                root[PATH_MAX - 1] = '\0';
+                    strncpy(root, root_item->valuestring, TILL_MAX_PATH - 1);
+                root[TILL_MAX_PATH - 1] = '\0';
                     cJSON_Delete(json);
                     return root;
                 }
@@ -233,8 +233,8 @@ static char *find_component_root(const char *component_name) {
         if (strcmp(component_name, comp_type) == 0) {
             cJSON *root_item = cJSON_GetObjectItem(installation, "root");
             if (root_item && cJSON_IsString(root_item)) {
-                strncpy(root, root_item->valuestring, PATH_MAX - 1);
-                root[PATH_MAX - 1] = '\0';
+                strncpy(root, root_item->valuestring, TILL_MAX_PATH - 1);
+                root[TILL_MAX_PATH - 1] = '\0';
                 cJSON_Delete(json);
                 return root;
             }
@@ -257,7 +257,7 @@ static int execute_component_command(const char *component, const char *command,
     }
     
     /* Build path to command */
-    char cmd_path[PATH_MAX];
+    char cmd_path[TILL_MAX_PATH];
     snprintf(cmd_path, sizeof(cmd_path), "%s/TILL_COMMANDS_DIR/%s", root, command);
     
     /* Check if command exists and is executable */
@@ -266,7 +266,7 @@ static int execute_component_command(const char *component, const char *command,
                 command, component);
         
         /* List available commands */
-        char cmd_dir[PATH_MAX];
+        char cmd_dir[TILL_MAX_PATH];
         snprintf(cmd_dir, sizeof(cmd_dir), "%s/%s", root, TILL_COMMANDS_DIR);
         
         DIR *dir = opendir(cmd_dir);
@@ -275,7 +275,7 @@ static int execute_component_command(const char *component, const char *command,
             struct dirent *entry;
             while ((entry = readdir(dir))) {
                 if (entry->d_name[0] != '.') {
-                    char check_path[PATH_MAX];
+                    char check_path[TILL_MAX_PATH];
                     snprintf(check_path, sizeof(check_path), "%s/%s", 
                             cmd_dir, entry->d_name);
                     if (is_executable(check_path)) {
@@ -311,7 +311,7 @@ static int execute_component_command(const char *component, const char *command,
     exec_args[argc + 1] = NULL;
     
     /* Change to component root directory before executing */
-    char original_dir[PATH_MAX];
+    char original_dir[TILL_MAX_PATH];
     if (getcwd(original_dir, sizeof(original_dir)) == NULL) {
         free(exec_args);
         return -1;

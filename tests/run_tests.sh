@@ -24,17 +24,25 @@ TILL="${TILL:-./till}"
 export TILL
 
 # Parse arguments
+RUN_UNIT=true
 RUN_FUNCTIONAL=true
 RUN_INTEGRATION=true
 VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --unit-only)
+            RUN_FUNCTIONAL=false
+            RUN_INTEGRATION=false
+            shift
+            ;;
         --functional-only)
+            RUN_UNIT=false
             RUN_INTEGRATION=false
             shift
             ;;
         --integration-only)
+            RUN_UNIT=false
             RUN_FUNCTIONAL=false
             shift
             ;;
@@ -47,6 +55,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
+            echo "  --unit-only          Run only unit tests"
             echo "  --functional-only    Run only functional tests"
             echo "  --integration-only   Run only integration tests"
             echo "  --verbose, -v        Show detailed output"
@@ -138,10 +147,46 @@ run_test_suite() {
 }
 
 # Track suite results
+UNIT_PASSED=0
+UNIT_TOTAL=0
 FUNCTIONAL_PASSED=0
 FUNCTIONAL_TOTAL=0
 INTEGRATION_PASSED=0
 INTEGRATION_TOTAL=0
+
+# Run unit tests
+if [ "$RUN_UNIT" = true ]; then
+    echo -e "\n${CYAN}══════════════════════════════════════════${NC}"
+    echo -e "${CYAN}            UNIT TESTS${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════${NC}"
+    
+    if [ -d "$(dirname $0)/unit" ]; then
+        # Build unit tests
+        echo "Building unit tests..."
+        (cd "$(dirname $0)/unit" && make all > /dev/null 2>&1)
+        
+        # Run unit tests
+        for test in $(dirname $0)/unit/test_*; do
+            if [ -x "$test" ] && [ -f "$test" ] && [[ ! "$test" == *.c ]] && [[ ! "$test" == *.dSYM ]]; then
+                test_name=$(basename "$test")
+                ((UNIT_TOTAL++))
+                echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${YELLOW}Running unit test:${NC} $test_name"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                
+                if "$test"; then
+                    echo -e "${GREEN}✓ $test_name passed${NC}"
+                    ((UNIT_PASSED++))
+                else
+                    echo -e "${RED}✗ $test_name failed${NC}"
+                    FAILED_SUITES+=("$test_name")
+                fi
+            fi
+        done
+    else
+        echo -e "${YELLOW}Warning: No unit tests directory found${NC}"
+    fi
+fi
 
 # Run functional tests
 if [ "$RUN_FUNCTIONAL" = true ]; then
@@ -188,6 +233,10 @@ echo
 echo -e "${BLUE}══════════════════════════════════════════${NC}"
 echo -e "${CYAN}           FINAL SUMMARY${NC}"
 echo -e "${BLUE}══════════════════════════════════════════${NC}"
+
+if [ "$RUN_UNIT" = true ] && [ $UNIT_TOTAL -gt 0 ]; then
+    echo -e "Unit Test Suites:        ${GREEN}$UNIT_PASSED${NC}/$UNIT_TOTAL passed"
+fi
 
 if [ "$RUN_FUNCTIONAL" = true ] && [ $FUNCTIONAL_TOTAL -gt 0 ]; then
     echo -e "Functional Test Suites:  ${GREEN}$FUNCTIONAL_PASSED${NC}/$FUNCTIONAL_TOTAL passed"

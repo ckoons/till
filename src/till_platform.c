@@ -110,7 +110,7 @@ const char *platform_get_home_dir(void) {
 
 /* Get config directory */
 const char *platform_get_config_dir(void) {
-    static char config_dir[PATH_MAX];
+    static char config_dir[TILL_MAX_PATH];
     
 #if PLATFORM_MACOS
     snprintf(config_dir, sizeof(config_dir), "%s/Library/Application Support", 
@@ -145,7 +145,7 @@ const char *platform_get_temp_dir(void) {
 
 /* Create directory with parents */
 int platform_mkdir_p(const char *path, int mode) {
-    char tmp[PATH_MAX];
+    char tmp[TILL_MAX_PATH];
     char *p = NULL;
     size_t len;
     
@@ -233,7 +233,7 @@ int platform_get_executable_path(char *path, size_t size) {
 #if PLATFORM_MACOS
     uint32_t bufsize = size;
     if (_NSGetExecutablePath(path, &bufsize) == 0) {
-        char resolved[PATH_MAX];
+        char resolved[TILL_MAX_PATH];
         if (realpath(path, resolved)) {
             strncpy(path, resolved, size - 1);
             path[size - 1] = '\0';

@@ -19,8 +19,8 @@
 #include "till_security.h"
 #include "cJSON.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
+#ifndef TILL_MAX_PATH
+#define TILL_MAX_PATH 4096
 #endif
 
 /* Parse user@host[:port] format */

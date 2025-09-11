@@ -30,8 +30,8 @@ int validate_path(const char *path, const char *base_dir) {
     
     /* If base_dir specified, ensure path is within it */
     if (base_dir) {
-        char resolved_path[PATH_MAX];
-        char resolved_base[PATH_MAX];
+        char resolved_path[TILL_MAX_PATH];
+        char resolved_base[TILL_MAX_PATH];
         
         if (!realpath(path, resolved_path) || !realpath(base_dir, resolved_base)) {
             return 0;
@@ -351,10 +351,10 @@ int write_file_atomic(const char *path, const char *content, size_t len) {
     if (!path || !content) return -1;
     
     /* Create temp file in same directory */
-    char temp_path[PATH_MAX];
+    char temp_path[TILL_MAX_PATH];
     snprintf(temp_path, sizeof(temp_path), "%s.tmp.%d", path, getpid());
     
-    int fd = open(temp_path, O_CREAT | O_EXCL | O_WRONLY, 0644);
+    int fd = open(temp_path, O_CREAT | O_EXCL | O_WRONLY, TILL_FILE_PERMS);
     if (fd < 0) {
         return -1;
     }
@@ -393,7 +393,7 @@ int write_file_atomic(const char *path, const char *content, size_t len) {
 int acquire_lock_file(const char *path, int timeout_ms) {
     if (!path) return -1;
     
-    int fd = open(path, O_CREAT | O_RDWR, 0644);
+    int fd = open(path, O_CREAT | O_RDWR, TILL_FILE_PERMS);
     if (fd < 0) {
         return -1;
     }

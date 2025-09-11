@@ -7,16 +7,11 @@
 
 #include <limits.h>
 #include "cJSON.h"
+#include "till_constants.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
-
-/* Log levels */
-#define LOG_ERROR   0
-#define LOG_WARN    1
-#define LOG_INFO    2
-#define LOG_DEBUG   3
 
 /* Logging functions */
 int till_log_init(void);

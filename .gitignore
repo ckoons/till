@@ -19,6 +19,11 @@
 *~
 .DS_Store
 
+# Backup files
+*.bak
+*.backup
+*.old
+
 # Debug files
 *.dSYM/
 core
