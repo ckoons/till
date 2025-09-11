@@ -289,7 +289,7 @@ int till_host_setup(const char *name) {
         snprintf(install_cmd, sizeof(install_cmd),
             "mkdir -p ~/%s && cd ~/%s && "
             "git clone %s " TILL_REMOTE_INSTALL_PATH " && "
-            "cd " TILL_REMOTE_INSTALL_PATH " && make && make install",
+            "cd " TILL_REMOTE_INSTALL_PATH " && make",
             TILL_PROJECTS_BASE, TILL_PROJECTS_BASE, TILL_REPO_URL);
         
         if (run_ssh_command(user, hostname, port, install_cmd, NULL, 0) != 0) {
@@ -307,19 +307,23 @@ int till_host_setup(const char *name) {
         till_log(LOG_INFO, "Till installed on host '%s'", name);
     }
     
-    /* Verify installation */
+    /* Verify installation - till runs from its build directory */
     if (run_ssh_command(user, hostname, port, 
-                       "till --version 2>/dev/null || ~/" TILL_REMOTE_INSTALL_PATH "/till --version",
+                       "~/" TILL_REMOTE_INSTALL_PATH "/till --version",
                        output, sizeof(output)) == 0) {
         printf("✓ Till is working on remote host\n");
+        printf("✓ Till location: ~/%s/till\n", TILL_REMOTE_INSTALL_PATH);
         
         /* Update status */
         cJSON_SetValuestring(cJSON_GetObjectItem(host, "status"), "ready");
         save_till_json("hosts-local.json", json);
+        
+        till_log(LOG_INFO, "Till setup complete on host '%s'", name);
     } else {
-        printf("⚠ Warning: Till installed but not in PATH\n");
-        printf("Remote users should run: ~/%s/till\n", TILL_REMOTE_INSTALL_PATH);
-        till_log(LOG_WARN, "Till installed but not in PATH on host '%s'", name);
+        printf("✗ Error: Till verification failed\n");
+        till_log(LOG_ERROR, "Till verification failed on host '%s'", name);
+        cJSON_Delete(json);
+        return -1;
     }
     
     cJSON_Delete(json);
@@ -355,15 +359,33 @@ int till_host_exec(const char *name, const char *command) {
     int port = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "port"));
     if (!port) port = 22;
     
-    cJSON_Delete(json);
+    /* Validate we got the values */
+    if (!user || !hostname) {
+        till_log(LOG_ERROR, "Host '%s' missing user or hostname", name);
+        till_error("Host '%s' is misconfigured\n", name);
+        cJSON_Delete(json);
+        return -1;
+    }
     
     till_log(LOG_INFO, "Executing command on host '%s': %s", name, command);
     
-    /* Execute command */
-    char ssh_cmd[4096];
+    /* If command starts with "till ", use the full path */
+    char actual_command[4096];
+    if (strncmp(command, "till ", 5) == 0) {
+        snprintf(actual_command, sizeof(actual_command),
+                 "~/" TILL_REMOTE_INSTALL_PATH "/%s", command);
+    } else {
+        strncpy(actual_command, command, sizeof(actual_command) - 1);
+        actual_command[sizeof(actual_command) - 1] = '\0';
+    }
+    
+    /* Execute command - must use user/hostname before freeing json */
+    char ssh_cmd[8192];
     snprintf(ssh_cmd, sizeof(ssh_cmd),
         "ssh -o ConnectTimeout=5 %s@%s -p %d '%s'",
-        user, hostname, port, command);
+        user, hostname, port, actual_command);
+    
+    cJSON_Delete(json);
     
     return run_command(ssh_cmd, NULL, 0);
 }
