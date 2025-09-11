@@ -114,6 +114,13 @@ static int kill_process(int pid) {
     return kill_process_graceful(pid, 1000);  /* 1 second timeout */
 }
 
+/* Port conflict structure */
+typedef struct {
+    int port;
+    char process[256];
+    int pid;
+} port_conflict_t;
+
 /* Find available port range */
 static int find_available_port_range(int *base_port, int range_size) {
     int start_port = *base_port;
@@ -140,61 +147,201 @@ static int find_available_port_range(int *base_port, int range_size) {
     return -1; /* No available range found */
 }
 
+/* Scan port range for conflicts */
+static int scan_port_range(int base_port, int count, port_conflict_t *conflicts, 
+                          int *num_conflicts, int max_conflicts) {
+    for (int i = 0; i < count; i++) {
+        int port = base_port + i;
+        char proc_info[256] = "";
+        
+        if (check_port_in_use(port, proc_info, sizeof(proc_info))) {
+            if (*num_conflicts < max_conflicts) {
+                conflicts[*num_conflicts].port = port;
+                strncpy(conflicts[*num_conflicts].process, proc_info, 
+                       sizeof(conflicts[*num_conflicts].process) - 1);
+                conflicts[*num_conflicts].process[sizeof(conflicts[*num_conflicts].process) - 1] = '\0';
+                
+                /* Extract PID from process info */
+                char *pid_str = strstr(proc_info, "PID: ");
+                if (pid_str) {
+                    conflicts[*num_conflicts].pid = atoi(pid_str + 5);
+                }
+                (*num_conflicts)++;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Handle port conflicts interactively */
+static int handle_port_conflicts_interactive(install_options_t *opts, 
+                                            port_conflict_t *conflicts, 
+                                            int num_conflicts);
+
+/* Kill conflicting processes */
+static int kill_conflicting_processes(port_conflict_t *conflicts, int num_conflicts) {
+    /* Show unique processes */
+    int shown_pids[100] = {0};
+    int num_shown = 0;
+    
+    printf("\n⚠️  This will terminate the following processes:\n");
+    
+    for (int i = 0; i < num_conflicts; i++) {
+        int already_shown = 0;
+        for (int j = 0; j < num_shown; j++) {
+            if (shown_pids[j] == conflicts[i].pid) {
+                already_shown = 1;
+                break;
+            }
+        }
+        
+        if (!already_shown && conflicts[i].pid > 0) {
+            printf("    %s\n", conflicts[i].process);
+            shown_pids[num_shown++] = conflicts[i].pid;
+        }
+    }
+    
+    printf("\nProceed? [y/N]: ");
+    char choice[10];
+    if (!fgets(choice, sizeof(choice), stdin) || choice[0] != 'y') {
+        printf("Cancelled\n");
+        return -1;
+    }
+    
+    /* Kill the processes */
+    for (int i = 0; i < num_shown; i++) {
+        if (shown_pids[i] > 0) {
+            printf("  Stopping PID %d...\n", shown_pids[i]);
+            kill_process(shown_pids[i]);
+        }
+    }
+    
+    /* Brief pause for processes to terminate */
+    sleep(1);
+    
+    /* Verify ports are now free */
+    int still_blocked = 0;
+    for (int i = 0; i < num_conflicts; i++) {
+        char proc_info[256];
+        if (check_port_in_use(conflicts[i].port, proc_info, sizeof(proc_info))) {
+            still_blocked++;
+        }
+    }
+    
+    if (still_blocked > 0) {
+        till_error("Warning: %d ports still in use after killing processes\n", still_blocked);
+        till_error("Some processes may have restarted. Proceeding anyway...\n");
+    } else {
+        printf("  ✓ All conflicting processes stopped\n");
+    }
+    
+    return 0;
+}
+
+/* Find alternative ports automatically */
+static int find_alternative_ports(install_options_t *opts) {
+    printf("\nSearching for alternative port ranges...\n");
+    
+    int new_base = opts->port_base;
+    int new_ai_base = opts->ai_port_base;
+    
+    if (find_available_port_range(&new_base, 100) == 0 &&
+        find_available_port_range(&new_ai_base, 100) == 0) {
+        printf("  Found available ranges:\n");
+        printf("    Main ports: %d-%d\n", new_base, new_base + 99);
+        printf("    AI ports: %d-%d\n", new_ai_base, new_ai_base + 99);
+        
+        if (!g_interactive) {
+            opts->port_base = new_base;
+            opts->ai_port_base = new_ai_base;
+            return 0;
+        }
+        
+        printf("\nUse these ports? [Y/n]: ");
+        char choice[10];
+        if (!fgets(choice, sizeof(choice), stdin) || 
+            (choice[0] != 'n' && choice[0] != 'N')) {
+            opts->port_base = new_base;
+            opts->ai_port_base = new_ai_base;
+            printf("  ✓ Using alternative port ranges\n");
+            return 0;
+        }
+    } else {
+        till_error("Unable to find available port ranges\n");
+        if (!g_interactive) {
+            till_error("Please stop conflicting processes or use --interactive mode\n");
+        }
+        return -1;
+    }
+    return -1;
+}
+
+/* Manual port entry */
+static int enter_custom_ports(install_options_t *opts) {
+    printf("\nEnter custom port ranges:\n");
+    
+    printf("  Main port base (e.g., 8000): ");
+    char port_str[20];
+    if (!fgets(port_str, sizeof(port_str), stdin)) {
+        return -1;
+    }
+    int new_base = atoi(port_str);
+    
+    printf("  AI port base (e.g., 45000): ");
+    if (!fgets(port_str, sizeof(port_str), stdin)) {
+        return -1;
+    }
+    int new_ai_base = atoi(port_str);
+    
+    /* Validate ranges */
+    if (new_base < 1024 || new_base > 65436 ||
+        new_ai_base < 1024 || new_ai_base > 65436) {
+        till_error("Invalid port ranges\n");
+        return -1;
+    }
+    
+    /* Check if these are available */
+    printf("\nChecking availability...\n");
+    int conflicts_found = 0;
+    
+    for (int i = 0; i < 100; i++) {
+        char proc_info[256];
+        if (check_port_in_use(new_base + i, proc_info, sizeof(proc_info)) ||
+            check_port_in_use(new_ai_base + i, proc_info, sizeof(proc_info))) {
+            conflicts_found++;
+        }
+    }
+    
+    if (conflicts_found > 0) {
+        printf("  ⚠️  %d ports in use in selected ranges\n", conflicts_found);
+        printf("  Proceed anyway? [y/N]: ");
+        char choice[10];
+        if (!fgets(choice, sizeof(choice), stdin) || choice[0] != 'y') {
+            return -1;
+        }
+    } else {
+        printf("  ✓ All ports available\n");
+    }
+    
+    opts->port_base = new_base;
+    opts->ai_port_base = new_ai_base;
+    return 0;
+}
+
 /* Allocate ports for installation */
 int allocate_ports(install_options_t *opts) {
     printf("\nChecking port availability...\n");
-    
-    /* Structures to hold conflict information */
-    typedef struct {
-        int port;
-        char process[256];
-        int pid;
-    } port_conflict_t;
     
     port_conflict_t conflicts[200];
     int num_conflicts = 0;
     
     /* Check main port range (100 ports) */
     printf("  Checking ports %d-%d...\n", opts->port_base, opts->port_base + 99);
-    for (int i = 0; i < 100; i++) {
-        int port = opts->port_base + i;
-        char proc_info[256] = "";
-        
-        if (check_port_in_use(port, proc_info, sizeof(proc_info))) {
-            if (num_conflicts < 200) {
-                conflicts[num_conflicts].port = port;
-                strncpy(conflicts[num_conflicts].process, proc_info, sizeof(conflicts[num_conflicts].process) - 1);
-                
-                /* Extract PID from process info */
-                char *pid_str = strstr(proc_info, "PID: ");
-                if (pid_str) {
-                    conflicts[num_conflicts].pid = atoi(pid_str + 5);
-                }
-                num_conflicts++;
-            }
-        }
-    }
+    scan_port_range(opts->port_base, 100, conflicts, &num_conflicts, 200);
     
     /* Check AI port range (100 ports) */
     printf("  Checking AI ports %d-%d...\n", opts->ai_port_base, opts->ai_port_base + 99);
-    for (int i = 0; i < 100; i++) {
-        int port = opts->ai_port_base + i;
-        char proc_info[256] = "";
-        
-        if (check_port_in_use(port, proc_info, sizeof(proc_info))) {
-            if (num_conflicts < 200) {
-                conflicts[num_conflicts].port = port;
-                strncpy(conflicts[num_conflicts].process, proc_info, sizeof(conflicts[num_conflicts].process) - 1);
-                
-                /* Extract PID from process info */
-                char *pid_str = strstr(proc_info, "PID: ");
-                if (pid_str) {
-                    conflicts[num_conflicts].pid = atoi(pid_str + 5);
-                }
-                num_conflicts++;
-            }
-        }
-    }
+    scan_port_range(opts->ai_port_base, 100, conflicts, &num_conflicts, 200);
     
     /* If no conflicts, we're good */
     if (num_conflicts == 0) {
@@ -228,13 +375,20 @@ int allocate_ports(install_options_t *opts) {
             opts->ai_port_base = new_ai_base;
             return 0;
         } else {
-            fprintf(stderr, "Error: Unable to find available port ranges\n");
-            fprintf(stderr, "Please stop conflicting processes or use --interactive mode\n");
+            till_error("Unable to find available port ranges\n");
+            till_error("Please stop conflicting processes or use --interactive mode\n");
             return -1;
         }
     }
     
     /* Interactive mode - give user options */
+    return handle_port_conflicts_interactive(opts, conflicts, num_conflicts);
+}
+
+/* Handle port conflicts interactively - implementation */
+static int handle_port_conflicts_interactive(install_options_t *opts, 
+                                            port_conflict_t *conflicts, 
+                                            int num_conflicts) {
     printf("\nOptions:\n");
     printf("  1. Kill conflicting processes and use requested ports\n");
     printf("  2. Find alternative port ranges automatically\n");
@@ -248,150 +402,19 @@ int allocate_ports(install_options_t *opts) {
     }
     
     switch (choice[0]) {
-        case '1': {
-            /* Kill conflicting processes */
-            printf("\n⚠️  This will terminate the following processes:\n");
-            
-            /* Show unique processes */
-            int shown_pids[100] = {0};
-            int num_shown = 0;
-            
-            for (int i = 0; i < num_conflicts; i++) {
-                int already_shown = 0;
-                for (int j = 0; j < num_shown; j++) {
-                    if (shown_pids[j] == conflicts[i].pid) {
-                        already_shown = 1;
-                        break;
-                    }
-                }
-                
-                if (!already_shown && conflicts[i].pid > 0) {
-                    printf("    %s\n", conflicts[i].process);
-                    shown_pids[num_shown++] = conflicts[i].pid;
-                }
-            }
-            
-            printf("\nProceed? [y/N]: ");
-            if (!fgets(choice, sizeof(choice), stdin) || choice[0] != 'y') {
-                printf("Cancelled\n");
-                return -1;
-            }
-            
-            /* Kill the processes */
-            for (int i = 0; i < num_shown; i++) {
-                if (shown_pids[i] > 0) {
-                    printf("  Stopping PID %d...\n", shown_pids[i]);
-                    kill_process(shown_pids[i]);
-                }
-            }
-            
-            /* Brief pause for processes to terminate */
-            sleep(1);
-            
-            /* Verify ports are now free */
-            int still_blocked = 0;
-            for (int i = 0; i < num_conflicts; i++) {
-                char proc_info[256];
-                if (check_port_in_use(conflicts[i].port, proc_info, sizeof(proc_info))) {
-                    still_blocked++;
-                }
-            }
-            
-            if (still_blocked > 0) {
-                fprintf(stderr, "Warning: %d ports still in use after killing processes\n", still_blocked);
-                fprintf(stderr, "Some processes may have restarted. Proceeding anyway...\n");
-            } else {
-                printf("  ✓ All conflicting processes stopped\n");
-            }
-            
-            return 0;
-        }
+        case '1':
+            return kill_conflicting_processes(conflicts, num_conflicts);
         
-        case '2': {
-            /* Find alternative ports automatically */
-            printf("\nSearching for available port ranges...\n");
-            
-            int new_base = opts->port_base;
-            int new_ai_base = opts->ai_port_base;
-            
-            if (find_available_port_range(&new_base, 100) == 0 &&
-                find_available_port_range(&new_ai_base, 100) == 0) {
-                printf("  Found available ranges:\n");
-                printf("    Main ports: %d-%d\n", new_base, new_base + 99);
-                printf("    AI ports: %d-%d\n", new_ai_base, new_ai_base + 99);
-                
-                printf("\nUse these ports? [Y/n]: ");
-                if (!fgets(choice, sizeof(choice), stdin) || 
-                    (choice[0] != 'n' && choice[0] != 'N')) {
-                    opts->port_base = new_base;
-                    opts->ai_port_base = new_ai_base;
-                    printf("  ✓ Using alternative port ranges\n");
-                    return 0;
-                }
-            } else {
-                fprintf(stderr, "Error: Unable to find available port ranges\n");
-                return -1;
-            }
-            break;
-        }
+        case '2':
+            return find_alternative_ports(opts);
         
-        case '3': {
-            /* Manual port entry */
-            printf("\nEnter custom port ranges:\n");
-            
-            printf("  Main port base (e.g., 8000): ");
-            char port_str[20];
-            if (!fgets(port_str, sizeof(port_str), stdin)) {
-                return -1;
-            }
-            int new_base = atoi(port_str);
-            
-            printf("  AI port base (e.g., 45000): ");
-            if (!fgets(port_str, sizeof(port_str), stdin)) {
-                return -1;
-            }
-            int new_ai_base = atoi(port_str);
-            
-            /* Validate ranges */
-            if (new_base < 1024 || new_base > 65436 ||
-                new_ai_base < 1024 || new_ai_base > 65436) {
-                fprintf(stderr, "Error: Invalid port ranges\n");
-                return -1;
-            }
-            
-            /* Check if these are available */
-            printf("\nChecking availability...\n");
-            int conflicts_found = 0;
-            
-            for (int i = 0; i < 100; i++) {
-                char proc_info[256];
-                if (check_port_in_use(new_base + i, proc_info, sizeof(proc_info)) ||
-                    check_port_in_use(new_ai_base + i, proc_info, sizeof(proc_info))) {
-                    conflicts_found++;
-                }
-            }
-            
-            if (conflicts_found > 0) {
-                printf("  ⚠️  %d ports in use in selected ranges\n", conflicts_found);
-                printf("  Proceed anyway? [y/N]: ");
-                if (!fgets(choice, sizeof(choice), stdin) || choice[0] != 'y') {
-                    return -1;
-                }
-            } else {
-                printf("  ✓ All ports available\n");
-            }
-            
-            opts->port_base = new_base;
-            opts->ai_port_base = new_ai_base;
-            return 0;
-        }
+        case '3':
+            return enter_custom_ports(opts);
         
         case '4':
         default:
             printf("Installation cancelled\n");
             return -1;
     }
-    
-    return -1;
 }
 

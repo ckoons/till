@@ -43,7 +43,8 @@ static cJSON *load_installations(void) {
 static void extract_component_name(const char *registry_name, char *component) {
     /* For Tekton installations, component is always "tekton" */
     if (strstr(registry_name, "tekton")) {
-        strcpy(component, "tekton");
+        strncpy(component, "tekton", 256 - 1);
+        component[256 - 1] = '\0';
         return;
     }
     
@@ -54,7 +55,8 @@ static void extract_component_name(const char *registry_name, char *component) {
         strncpy(component, registry_name, len);
         component[len] = '\0';
     } else {
-        strcpy(component, registry_name);
+        strncpy(component, registry_name, 256 - 1);
+        component[256 - 1] = '\0';
     }
 }
 
@@ -105,13 +107,13 @@ static int list_component_commands(const char *component, const char *root) {
 static int list_all_components(void) {
     cJSON *json = load_installations();
     if (!json) {
-        fprintf(stderr, "No installations found. Run 'till install' first.\n");
+        till_error("No installations found. Run 'till install' first.");
         return -1;
     }
     
     cJSON *installations = cJSON_GetObjectItem(json, "installations");
     if (!installations) {
-        fprintf(stderr, "No installations found in configuration.\n");
+        till_error("No installations found in configuration.");
         cJSON_Delete(json);
         return -1;
     }
@@ -144,9 +146,12 @@ static int list_all_components(void) {
             }
             
             if (!found && has_command_directory(root)) {
-                strcpy(components[comp_count].name, component);
-                strcpy(components[comp_count].root, root);
-                strcpy(components[comp_count].registry_name, registry_name);
+                strncpy(components[comp_count].name, component, sizeof(components[comp_count].name) - 1);
+                components[comp_count].name[sizeof(components[comp_count].name) - 1] = '\0';
+                strncpy(components[comp_count].root, root, sizeof(components[comp_count].root) - 1);
+                components[comp_count].root[sizeof(components[comp_count].root) - 1] = '\0';
+                strncpy(components[comp_count].registry_name, registry_name, sizeof(components[comp_count].registry_name) - 1);
+                components[comp_count].registry_name[sizeof(components[comp_count].registry_name) - 1] = '\0';
                 components[comp_count].has_commands = 1;
                 comp_count++;
                 
@@ -190,7 +195,8 @@ static char *find_component_root(const char *component_name) {
         if (strcmp(component_name, registry_name) == 0) {
             cJSON *root_item = cJSON_GetObjectItem(installation, "root");
             if (root_item && cJSON_IsString(root_item)) {
-                strcpy(root, root_item->valuestring);
+                strncpy(root, root_item->valuestring, PATH_MAX - 1);
+                root[PATH_MAX - 1] = '\0';
                 cJSON_Delete(json);
                 return root;
             }
@@ -209,7 +215,8 @@ static char *find_component_root(const char *component_name) {
             if (strstr(registry_name, "primary")) {
                 cJSON *root_item = cJSON_GetObjectItem(installation, "root");
                 if (root_item && cJSON_IsString(root_item)) {
-                    strcpy(root, root_item->valuestring);
+                    strncpy(root, root_item->valuestring, PATH_MAX - 1);
+                root[PATH_MAX - 1] = '\0';
                     cJSON_Delete(json);
                     return root;
                 }
@@ -226,7 +233,8 @@ static char *find_component_root(const char *component_name) {
         if (strcmp(component_name, comp_type) == 0) {
             cJSON *root_item = cJSON_GetObjectItem(installation, "root");
             if (root_item && cJSON_IsString(root_item)) {
-                strcpy(root, root_item->valuestring);
+                strncpy(root, root_item->valuestring, PATH_MAX - 1);
+                root[PATH_MAX - 1] = '\0';
                 cJSON_Delete(json);
                 return root;
             }
@@ -243,8 +251,8 @@ static int execute_component_command(const char *component, const char *command,
     /* Find component root */
     char *root = find_component_root(component);
     if (!root) {
-        fprintf(stderr, "Error: Component '%s' not found.\n", component);
-        fprintf(stderr, "Run 'till run' to see available components.\n");
+        till_error("Component '%s' not found.", component);
+        till_info("Run 'till run' to see available components.");
         return -1;
     }
     
@@ -254,7 +262,7 @@ static int execute_component_command(const char *component, const char *command,
     
     /* Check if command exists and is executable */
     if (!path_exists(cmd_path)) {
-        fprintf(stderr, "Error: Command '%s' not found for component '%s'.\n", 
+        till_error("Command '%s' not found for component '%s'.", 
                 command, component);
         
         /* List available commands */
@@ -277,22 +285,22 @@ static int execute_component_command(const char *component, const char *command,
             }
             closedir(dir);
         } else {
-            fprintf(stderr, "\nComponent '%s' has no TILL_COMMANDS_DIR directory.\n", 
+            till_error("Component '%s' has no TILL_COMMANDS_DIR directory.", 
                     component);
         }
         return -1;
     }
     
     if (!is_executable(cmd_path)) {
-        fprintf(stderr, "Error: Command '%s' is not executable.\n", command);
-        fprintf(stderr, "Fix with: chmod +x %s\n", cmd_path);
+        till_error("Command '%s' is not executable.", command);
+        till_info("Fix with: chmod +x %s", cmd_path);
         return -1;
     }
     
     /* Build arguments array for execv */
     char **exec_args = malloc((argc + 2) * sizeof(char *));
     if (!exec_args) {
-        fprintf(stderr, "Error: Memory allocation failed\n");
+        till_error("Memory allocation failed");
         return -1;
     }
     
@@ -310,7 +318,7 @@ static int execute_component_command(const char *component, const char *command,
     }
     
     if (chdir(root) != 0) {
-        fprintf(stderr, "Error: Cannot change to component directory: %s\n", 
+        till_error("Cannot change to component directory: %s", 
                 strerror(errno));
         free(exec_args);
         return -1;
@@ -323,7 +331,7 @@ static int execute_component_command(const char *component, const char *command,
     /* Execute the command */
     pid_t pid = fork();
     if (pid == -1) {
-        fprintf(stderr, "Error: Fork failed: %s\n", strerror(errno));
+        till_error("Fork failed: %s", strerror(errno));
         till_log(LOG_ERROR, "Fork failed for command %s: %s", command, strerror(errno));
         chdir(original_dir);
         free(exec_args);
@@ -334,7 +342,7 @@ static int execute_component_command(const char *component, const char *command,
         /* Child process */
         execv(cmd_path, exec_args);
         /* If we get here, exec failed */
-        fprintf(stderr, "Error: Failed to execute command: %s\n", strerror(errno));
+        till_error("Failed to execute command: %s", strerror(errno));
         exit(127);
     }
     
@@ -407,7 +415,7 @@ int till_run_command(int argc, char *argv[]) {
         /* Only component specified - list its commands */
         char *root = find_component_root(argv[0]);
         if (!root) {
-            fprintf(stderr, "Error: Component '%s' not found.\n", argv[0]);
+            till_error("Component '%s' not found.", argv[0]);
             return list_all_components();
         }
         

@@ -76,6 +76,16 @@
 #define TTL_ANNOUNCEMENT 1      /* 1 hour */
 #define TTL_HANDSHAKE 0.25      /* 15 minutes */
 
+/* Buffer Sizes */
+#define TILL_SMALL_BUFFER 256
+#define TILL_MEDIUM_BUFFER 512
+#define TILL_LARGE_BUFFER 1024
+#define TILL_XLARGE_BUFFER 2048
+#define TILL_HUGE_BUFFER 4096
+#define TILL_LINE_BUFFER 512
+#define TILL_OUTPUT_BUFFER 4096
+#define TILL_SSH_CMD_BUFFER 2048
+
 /* Command Configuration */
 #define TILL_MAX_ARGS 10
 #define TILL_MAX_PATH 4096

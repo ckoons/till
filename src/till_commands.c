@@ -154,14 +154,16 @@ int cmd_install(int argc, char *argv[]) {
     install_options_t opts = {0};
     
     /* Set defaults */
-    strcpy(opts.mode, MODE_SOLO);
+    strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1);
+    opts.mode[sizeof(opts.mode) - 1] = '\0';
     opts.port_base = DEFAULT_PORT_BASE;
     opts.ai_port_base = DEFAULT_AI_PORT_BASE;
     
     /* Get primary Tekton path if available */
     char primary_path[TILL_MAX_PATH];
     if (get_primary_tekton_path(primary_path, sizeof(primary_path)) == 0) {
-        strcpy(opts.tekton_main_root, primary_path);
+        strncpy(opts.tekton_main_root, primary_path, sizeof(opts.tekton_main_root) - 1);
+        opts.tekton_main_root[sizeof(opts.tekton_main_root) - 1] = '\0';
     }
     
     /* Parse arguments */
@@ -216,7 +218,8 @@ int cmd_install(int argc, char *argv[]) {
                 return EXIT_USAGE_ERROR;
             }
         } else {
-            strcpy(opts.name, "tekton-solo");
+            strncpy(opts.name, "tekton-solo", sizeof(opts.name) - 1);
+            opts.name[sizeof(opts.name) - 1] = '\0';
         }
     }
     

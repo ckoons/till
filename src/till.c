@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
     
     /* Ensure Till directories exist */
     if (ensure_directories() != 0) {
-        fprintf(stderr, "Error: Failed to create Till directories\n");
+        till_error("Failed to create Till directories");
         return EXIT_FILE_ERROR;
     }
     
@@ -147,8 +147,8 @@ int main(int argc, char *argv[]) {
             result = cmd->handler(argc - 1, argv + 1);
         }
     } else {
-        fprintf(stderr, "Error: Unknown command '%s'\n", argv[1]);
-        fprintf(stderr, "Try 'till --help' for usage information\n");
+        till_error("Unknown command '%s'", argv[1]);
+        till_info("Try 'till --help' for usage information");
         till_log(LOG_ERROR, "Unknown command: %s", argv[1]);
         return EXIT_USAGE_ERROR;
     }
@@ -243,7 +243,7 @@ static int create_directory(const char *path) {
     if (stat(path, &st) == -1) {
         if (mkdir(path, 0755) != 0) {
             if (errno != EEXIST) {
-                fprintf(stderr, "Error creating directory %s: %s\n", 
+                till_error("Creating directory %s: %s", 
                         path, strerror(errno));
                 return -1;
             }
@@ -374,7 +374,7 @@ int self_update_till(void) {
     int lock_fd;
     
     if (get_till_directory(till_dir, sizeof(till_dir)) != 0) {
-        fprintf(stderr, "Error: Could not determine till directory\n");
+        till_error("Could not determine till directory");
         return -1;
     }
     
@@ -429,7 +429,9 @@ int self_update_till(void) {
         snprintf(cmd, sizeof(cmd),
             "cd \"%s\" && git stash push -m 'till-auto-update-%ld' 2>&1",
             till_dir, (long)time(NULL));
-        system(cmd);
+        if (system(cmd) != 0) {
+            till_warn("Failed to stash changes");
+        }
     }
     
     /* 4. UPDATE - Pull latest */
@@ -492,7 +494,9 @@ int self_update_till(void) {
         
         /* Also revert git */
         snprintf(cmd, sizeof(cmd), "cd \"%s\" && git reset --hard HEAD~1", till_dir);
-        system(cmd);
+        if (system(cmd) != 0) {
+            till_error("Failed to reset git repository");
+        }
         
         close(lock_fd);
         unlink(lock_file);
@@ -548,7 +552,7 @@ int self_update_till(void) {
     execl(current_exe, "till", "sync", NULL);
     
     /* If execl fails, return error */
-    fprintf(stderr, "Error: Failed to restart with new version\n");
+    till_error("Failed to restart with new version");
     return -1;
 }
 

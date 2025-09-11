@@ -38,11 +38,11 @@ int clone_tekton_repo(const char *path) {
                 snprintf(cmd, sizeof(cmd), "cd %s && git pull", path);
                 return run_command(cmd, NULL, 0);
             } else {
-                fprintf(stderr, "Error: Directory exists but is not a git repository: %s\n", path);
+                till_error("Directory exists but is not a git repository: %s", path);
                 return -1;
             }
         } else {
-            fprintf(stderr, "Error: Path exists but is not a directory: %s\n", path);
+            till_error("Path exists but is not a directory: %s", path);
             return -1;
         }
     }
@@ -54,7 +54,7 @@ int clone_tekton_repo(const char *path) {
     till_log(LOG_INFO, "Cloning Tekton from %s to %s", TEKTON_REPO_URL, path);
     
     if (run_command(cmd, NULL, 0) != 0) {
-        fprintf(stderr, "Error: Failed to clone repository\n");
+        till_error("Failed to clone repository");
         till_log(LOG_ERROR, "Failed to clone Tekton repository");
         return -1;
     }
@@ -78,8 +78,8 @@ int generate_tekton_env(install_options_t *opts) {
     /* Read .env.local.example */
     fp_in = fopen(env_example, "r");
     if (!fp_in) {
-        fprintf(stderr, "Error: Cannot find .env.local.example in %s\n", opts->path);
-        fprintf(stderr, "  Make sure Tekton repository was cloned correctly\n");
+        till_error("Cannot find .env.local.example in %s", opts->path);
+        till_info("  Make sure Tekton repository was cloned correctly");
         till_log(LOG_ERROR, "Cannot find .env.local.example");
         return -1;
     }
@@ -88,7 +88,7 @@ int generate_tekton_env(install_options_t *opts) {
     fp_out = fopen(env_path, "w");
     if (!fp_out) {
         fclose(fp_in);
-        fprintf(stderr, "Error: Cannot create .env.local\n");
+        till_error("Cannot create .env.local");
         return -1;
     }
     
@@ -198,8 +198,8 @@ int install_tekton_dependencies(const char *path) {
     
     printf("  Running pip install (this may take a few minutes)...\n");
     if (system(pip_cmd) != 0) {
-        fprintf(stderr, "Warning: Failed to install Python dependencies\n");
-        fprintf(stderr, "  You may need to run 'pip install -e .' manually in %s\n", path);
+        till_warn("Failed to install Python dependencies");
+        till_info("  You may need to run 'pip install -e .' manually in %s", path);
         till_log(LOG_WARN, "Failed to install Python dependencies automatically");
         /* Not a fatal error - continue with installation */
         return 0;
@@ -240,13 +240,13 @@ int create_till_symlink(const char *tekton_path) {
         /* Wrong target, remove and recreate */
         unlink(symlink_path);
     } else if (path_exists(symlink_path)) {
-        fprintf(stderr, "Warning: .till exists but is not a symlink\n");
+        till_warn(".till exists but is not a symlink");
         return -1;
     }
     
     /* Create the symlink */
     if (symlink(till_dir, symlink_path) != 0) {
-        fprintf(stderr, "Warning: Could not create .till symlink: %s\n", strerror(errno));
+        till_warn("Could not create .till symlink: %s", strerror(errno));
         till_log(LOG_WARN, "Failed to create .till symlink: %s", strerror(errno));
         return -1;
     }
@@ -269,7 +269,7 @@ int install_tekton(install_options_t *opts) {
     
     /* Step 1: Clone Tekton repository */
     if (clone_tekton_repo(opts->path) != 0) {
-        fprintf(stderr, "Failed to clone Tekton repository\n");
+        till_error("Failed to clone Tekton repository");
         return -1;
     }
     
@@ -278,14 +278,14 @@ int install_tekton(install_options_t *opts) {
     
     /* Step 3: Generate .env.local */
     if (generate_tekton_env(opts) != 0) {
-        fprintf(stderr, "Failed to generate .env.local\n");
+        till_error("Failed to generate .env.local");
         return -1;
     }
     
     /* Step 4: Register installation */
     if (register_installation(opts->name, opts->path, opts->port_base, 
                             opts->ai_port_base, opts->mode) != 0) {
-        fprintf(stderr, "Failed to register installation\n");
+        till_error("Failed to register installation");
         return -1;
     }
     
@@ -330,14 +330,14 @@ int update_tekton(const char *path) {
     /* Git pull */
     snprintf(cmd, sizeof(cmd), "cd %s && git pull", path);
     if (run_command(cmd, NULL, 0) != 0) {
-        fprintf(stderr, "Failed to pull updates\n");
+        till_error("Failed to pull updates");
         return -1;
     }
     
     /* Update Python dependencies */
     snprintf(cmd, sizeof(cmd), "cd %s && pip install -e . --upgrade", path);
     if (system(cmd) != 0) {
-        fprintf(stderr, "Warning: Failed to update Python dependencies\n");
+        till_warn("Failed to update Python dependencies");
     }
     
     printf("Tekton updated successfully\n");

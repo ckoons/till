@@ -347,7 +347,8 @@ int till_watch_install_launchd(void) {
     /* Find till executable */
     char till_path[PATH_MAX];
     if (access("/usr/local/bin/till", X_OK) == 0) {
-        strcpy(till_path, "/usr/local/bin/till");
+        strncpy(till_path, "/usr/local/bin/till", sizeof(till_path) - 1);
+        till_path[sizeof(till_path) - 1] = '\0';
     } else {
         /* Use current location */
         char cwd[PATH_MAX];
@@ -394,7 +395,9 @@ int till_watch_install_launchd(void) {
     snprintf(cmd, sizeof(cmd), "launchctl unload %s 2>/dev/null; launchctl load %s",
         plist_path, plist_path);
     
-    system(cmd);
+    if (system(cmd) != 0) {
+        till_warn("Failed to reload launchd plist");
+    }
     
     return 0;
 }
@@ -417,7 +420,10 @@ int till_watch_install_systemd(void) {
     /* Create directory if needed */
     char cmd[PATH_MAX];
     snprintf(cmd, sizeof(cmd), "mkdir -p %s", service_dir);
-    system(cmd);
+    if (system(cmd) != 0) {
+        till_error("Failed to create systemd directory");
+        return -1;
+    }
     
     /* Load schedule to get timing */
     cJSON *schedule = load_schedule();
@@ -436,7 +442,8 @@ int till_watch_install_systemd(void) {
     /* Find till executable */
     char till_path[PATH_MAX];
     if (access("/usr/local/bin/till", X_OK) == 0) {
-        strcpy(till_path, "/usr/local/bin/till");
+        strncpy(till_path, "/usr/local/bin/till", sizeof(till_path) - 1);
+        till_path[sizeof(till_path) - 1] = '\0';
     } else {
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd)) == NULL) return -1;
@@ -483,9 +490,15 @@ int till_watch_install_systemd(void) {
     fclose(fp);
     
     /* Enable and start timer */
-    system("systemctl --user daemon-reload");
-    system("systemctl --user enable till-sync.timer");
-    system("systemctl --user start till-sync.timer");
+    if (system("systemctl --user daemon-reload") != 0) {
+        till_warn("Failed to reload systemd daemon");
+    }
+    if (system("systemctl --user enable till-sync.timer") != 0) {
+        till_warn("Failed to enable till-sync timer");
+    }
+    if (system("systemctl --user start till-sync.timer") != 0) {
+        till_warn("Failed to start till-sync timer");
+    }
     
     return 0;
 }
@@ -512,7 +525,8 @@ int till_watch_install_cron(void) {
     /* Find till executable */
     char till_path[PATH_MAX];
     if (access("/usr/local/bin/till", X_OK) == 0) {
-        strcpy(till_path, "/usr/local/bin/till");
+        strncpy(till_path, "/usr/local/bin/till", sizeof(till_path) - 1);
+        till_path[sizeof(till_path) - 1] = '\0';
     } else {
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd)) == NULL) return -1;
