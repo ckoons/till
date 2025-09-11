@@ -51,8 +51,16 @@ static int get_installation_name(const char *path, char *name, size_t size) {
     if (!fp) return -1;
     
     while (fgets(line, sizeof(line), fp)) {
-        if (strncmp(line, "INSTALLATION_NAME=", 18) == 0) {
-            char *value = line + 18;
+        char *value = NULL;
+        
+        /* Try both old and new naming conventions */
+        if (strncmp(line, "TEKTON_REGISTRY_NAME=", 21) == 0) {
+            value = line + 21;
+        } else if (strncmp(line, "INSTALLATION_NAME=", 18) == 0) {
+            value = line + 18;
+        }
+        
+        if (value) {
             /* Remove quotes and newline */
             if (*value == '"') value++;
             char *end = strchr(value, '"');
@@ -182,10 +190,8 @@ int discover_tektons(void) {
                     }
                     found_count++;
                 }
-            } else {
-                printf("  [ERROR] Cannot read: %s\n", full_path);
-                till_log(LOG_ERROR, "Cannot read %s", full_path);
             }
+            /* If we can't get the installation name, just skip it silently */
         }
     }
     
