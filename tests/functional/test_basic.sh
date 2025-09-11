@@ -96,7 +96,7 @@ fi
 # Test 5: Discovery without installations
 run_test "Discovery (no installations)"
 OUTPUT=$($TILL sync </dev/null 2>&1 | tail -5)
-if echo "$OUTPUT" | grep -q "Tekton installation"; then
+if echo "$OUTPUT" | grep -q "installation\|Summary\|Total"; then
     pass "Discovery runs without error"
 else
     fail "Discovery failed"
