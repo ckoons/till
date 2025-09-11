@@ -4,7 +4,7 @@
 # Compiler and flags
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99 -D_POSIX_C_SOURCE=200809L
-LDFLAGS = 
+LDFLAGS = -lpthread 
 
 # Debug build
 ifdef DEBUG
@@ -29,11 +29,11 @@ BIN_DIR = .
 TARGET = $(BIN_DIR)/till
 
 # Source files
-SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_hold.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_common_extra.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/till_commands.c $(SRC_DIR)/till_platform.c $(SRC_DIR)/till_platform_process.c $(SRC_DIR)/till_platform_schedule.c $(SRC_DIR)/till_security.c $(SRC_DIR)/cJSON.c
-HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_hold.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/till_commands.h $(SRC_DIR)/till_platform.h $(SRC_DIR)/till_security.h $(SRC_DIR)/cJSON.h
+SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_hold.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_common_extra.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/till_commands.c $(SRC_DIR)/till_platform.c $(SRC_DIR)/till_platform_process.c $(SRC_DIR)/till_platform_schedule.c $(SRC_DIR)/till_security.c $(SRC_DIR)/till_validate.c $(SRC_DIR)/till_progress.c $(SRC_DIR)/cJSON.c
+HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_hold.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/till_commands.h $(SRC_DIR)/till_platform.h $(SRC_DIR)/till_security.h $(SRC_DIR)/till_validate.h $(SRC_DIR)/till_progress.h $(SRC_DIR)/cJSON.h
 
 # Object files
-OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_hold.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_common_extra.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/till_commands.o $(BUILD_DIR)/till_platform.o $(BUILD_DIR)/till_platform_process.o $(BUILD_DIR)/till_platform_schedule.o $(BUILD_DIR)/till_security.o $(BUILD_DIR)/cJSON.o
+OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_hold.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_common_extra.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/till_commands.o $(BUILD_DIR)/till_platform.o $(BUILD_DIR)/till_platform_process.o $(BUILD_DIR)/till_platform_schedule.o $(BUILD_DIR)/till_security.o $(BUILD_DIR)/till_validate.o $(BUILD_DIR)/till_progress.o $(BUILD_DIR)/cJSON.o
 
 # Default target
 all: $(TARGET)
@@ -110,6 +110,14 @@ $(BUILD_DIR)/till_security.o: $(SRC_DIR)/till_security.c $(HEADERS)
 	@echo "Compiling till_security.c..."
 	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_security.c -o $(BUILD_DIR)/till_security.o
 
+$(BUILD_DIR)/till_validate.o: $(SRC_DIR)/till_validate.c $(HEADERS)
+	@echo "Compiling till_validate.c..."
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_validate.c -o $(BUILD_DIR)/till_validate.o
+
+$(BUILD_DIR)/till_progress.o: $(SRC_DIR)/till_progress.c $(HEADERS)
+	@echo "Compiling till_progress.c..."
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_progress.c -o $(BUILD_DIR)/till_progress.o
+
 $(BUILD_DIR)/cJSON.o: $(SRC_DIR)/cJSON.c $(SRC_DIR)/cJSON.h
 	@echo "Compiling cJSON.c..."
 	@$(CC) $(CFLAGS) -c $(SRC_DIR)/cJSON.c -o $(BUILD_DIR)/cJSON.o
@@ -122,7 +130,24 @@ clean:
 	@echo "Clean complete"
 
 # Install - smart install that tries system-wide first, falls back to user
-install: $(TARGET)
+# Generate man page from help text
+man: $(TARGET)
+	@echo "Generating man page..."
+	@echo ".TH TILL 1 \"$$(date +'%B %Y')\" \"Till 1.0.0\" \"Till Manual\"" > till.1
+	@echo ".SH NAME" >> till.1
+	@echo "till \\- Tekton Installation Lifecycle Manager" >> till.1
+	@echo ".SH SYNOPSIS" >> till.1
+	@echo ".B till" >> till.1
+	@echo "[\\fICOMMAND\\fR] [\\fIOPTIONS\\fR]" >> till.1
+	@echo ".SH DESCRIPTION" >> till.1
+	@echo "Till manages Tekton installations across local and remote systems." >> till.1
+	@echo ".SH FILES" >> till.1
+	@echo ".TP" >> till.1
+	@echo ".I ~/.till/" >> till.1
+	@echo "Till configuration directory" >> till.1
+	@echo "Man page generated"
+
+install: $(TARGET) man
 	@if [ -w /usr/local/bin ]; then \
 		echo "Installing till to /usr/local/bin..."; \
 		cp $(TARGET) /usr/local/bin/; \
@@ -184,4 +209,4 @@ help:
 	@echo "  info        - Show build configuration"
 	@echo "  help        - Show this help message"
 
-.PHONY: all clean install uninstall test debug info help
+.PHONY: all clean install uninstall test debug info help man

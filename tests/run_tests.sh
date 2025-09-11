@@ -215,8 +215,18 @@ if [ "$RUN_INTEGRATION" = true ]; then
     echo -e "${CYAN}══════════════════════════════════════════${NC}"
     
     if [ -d "$(dirname $0)/integration" ]; then
+        # Run mock-based tests first (they modify PATH)
+        if [ -f "$(dirname $0)/integration/test_with_mocks.sh" ]; then
+            echo -e "\n${YELLOW}Running Mock-Based Integration Test${NC}"
+            ((INTEGRATION_TOTAL++))
+            if run_test_suite "Integration (Mocks)" "$(dirname $0)/integration/test_with_mocks.sh"; then
+                ((INTEGRATION_PASSED++))
+            fi
+        fi
+        
+        # Run other integration tests
         for test in $(dirname $0)/integration/test_*.sh; do
-            if [ -f "$test" ]; then
+            if [ -f "$test" ] && [ "$test" != "$(dirname $0)/integration/test_with_mocks.sh" ]; then
                 ((INTEGRATION_TOTAL++))
                 if run_test_suite "Integration" "$test"; then
                     ((INTEGRATION_PASSED++))

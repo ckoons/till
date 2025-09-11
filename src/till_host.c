@@ -17,6 +17,7 @@
 #include "till_host.h"
 #include "till_common.h"
 #include "till_security.h"
+#include "till_platform.h"
 #include "cJSON.h"
 
 #ifndef TILL_MAX_PATH
@@ -178,9 +179,37 @@ int till_host_test(const char *name) {
     
     printf("Testing connection to '%s' (%s@%s:%d)...\n", name, user, hostname, port);
     
+    /* First test basic connectivity with ping */
+    printf("  Checking host reachability... ");
+    fflush(stdout);
+    if (platform_ping_host(hostname, 3000) == 0) {
+        printf("✓\n");
+    } else {
+        printf("⚠ (ping failed, host may still be reachable)\n");
+    }
+    
+    /* Test port connectivity */
+    printf("  Checking SSH port %d... ", port);
+    fflush(stdout);
+    if (platform_test_port(hostname, port, 3000) == 0) {
+        printf("✓\n");
+    } else {
+        printf("✗\n");
+        printf("\nSSH port %d appears to be closed or filtered.\n", port);
+        printf("Please verify:\n");
+        printf("  - SSH service is running on the remote host\n");
+        printf("  - Firewall allows connections on port %d\n", port);
+        printf("  - The correct port is specified\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
     /* Test SSH connection */
+    printf("  Testing SSH authentication... ");
+    fflush(stdout);
     if (run_ssh_command(user, hostname, port, "echo TILL_TEST_SUCCESS", NULL, 0) == 0) {
-        printf("✓ SSH connection successful\n");
+        printf("✓\n");
+        printf("\n✓ SSH connection successful\n");
         till_log(LOG_INFO, "SSH test successful for host '%s'", name);
         
         /* Update status */

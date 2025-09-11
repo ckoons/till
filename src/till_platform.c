@@ -143,6 +143,61 @@ const char *platform_get_temp_dir(void) {
     return "/tmp";
 }
 
+/* Test host connectivity with ping */
+int platform_ping_host(const char *hostname, int timeout_ms) {
+    if (!hostname) return -1;
+    
+    char cmd[512];
+    
+#ifdef __APPLE__
+    /* macOS ping: -c count, -W timeout in milliseconds */
+    snprintf(cmd, sizeof(cmd), "ping -c 1 -W %d %s >/dev/null 2>&1", 
+             timeout_ms, hostname);
+#else
+    /* Linux ping: -c count, -W timeout in seconds */
+    int timeout_sec = (timeout_ms + 999) / 1000;  /* Round up to seconds */
+    snprintf(cmd, sizeof(cmd), "ping -c 1 -W %d %s >/dev/null 2>&1", 
+             timeout_sec, hostname);
+#endif
+    
+    int result = system(cmd);
+    if (result == 0) {
+        till_log(LOG_DEBUG, "Ping successful to %s", hostname);
+        return 0;
+    } else {
+        till_log(LOG_DEBUG, "Ping failed to %s (code: %d)", hostname, result);
+        return -1;
+    }
+}
+
+/* Test TCP port connectivity */
+int platform_test_port(const char *hostname, int port, int timeout_ms) {
+    if (!hostname || port < 1 || port > 65535) return -1;
+    
+    char cmd[512];
+    int timeout_sec = (timeout_ms + 999) / 1000;  /* Round up to seconds */
+    
+#ifdef __APPLE__
+    /* Use nc (netcat) on macOS */
+    snprintf(cmd, sizeof(cmd), "nc -z -w %d %s %d >/dev/null 2>&1",
+             timeout_sec, hostname, port);
+#else
+    /* Use nc or timeout with telnet on Linux */
+    snprintf(cmd, sizeof(cmd), "timeout %d nc -z %s %d >/dev/null 2>&1",
+             timeout_sec, hostname, port);
+#endif
+    
+    int result = system(cmd);
+    if (result == 0) {
+        till_log(LOG_DEBUG, "Port %d open on %s", port, hostname);
+        return 0;
+    } else {
+        till_log(LOG_DEBUG, "Port %d closed/unreachable on %s (code: %d)", 
+                 port, hostname, result);
+        return -1;
+    }
+}
+
 /* Create directory with parents */
 int platform_mkdir_p(const char *path, int mode) {
     char tmp[TILL_MAX_PATH];

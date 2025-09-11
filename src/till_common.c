@@ -290,22 +290,45 @@ int save_json_file(const char *path, cJSON *json) {
         return -1;
     }
     
-    FILE *fp = fopen(path, "w");
-    if (!fp) {
+    /* Use atomic write with temp file */
+    char temp_path[TILL_MAX_PATH];
+    snprintf(temp_path, sizeof(temp_path), "%s.XXXXXX", path);
+    
+    int fd = mkstemp(temp_path);
+    if (fd == -1) {
         free(output);
-        till_error("Cannot open file %s for writing: %s", path, strerror(errno));
+        till_error("Cannot create temp file for %s: %s", path, strerror(errno));
+        return -1;
+    }
+    
+    FILE *fp = fdopen(fd, "w");
+    if (!fp) {
+        close(fd);
+        unlink(temp_path);
+        free(output);
+        till_error("Cannot open temp file for writing: %s", strerror(errno));
         return -1;
     }
     
     if (fprintf(fp, "%s", output) < 0) {
-        till_error("Failed to write to %s", path);
+        till_error("Failed to write to temp file");
         fclose(fp);
+        unlink(temp_path);
         free(output);
         return -1;
     }
     
     if (fclose(fp) != 0) {
-        till_error("Failed to close %s: %s", path, strerror(errno));
+        till_error("Failed to close temp file: %s", strerror(errno));
+        unlink(temp_path);
+        free(output);
+        return -1;
+    }
+    
+    /* Atomic rename to final location */
+    if (rename(temp_path, path) != 0) {
+        till_error("Failed to rename %s to %s: %s", temp_path, path, strerror(errno));
+        unlink(temp_path);
         free(output);
         return -1;
     }
@@ -466,7 +489,6 @@ int remove_ssh_config_entry(const char *name) {
     if (build_till_path(ssh_config, sizeof(ssh_config), "ssh/config") != 0) {
         return -1;
     }
-    snprintf(ssh_config_tmp, sizeof(ssh_config_tmp), "%s.tmp", ssh_config);
     
     FILE *fp_in = fopen(ssh_config, "r");
     if (!fp_in) {
@@ -474,10 +496,17 @@ int remove_ssh_config_entry(const char *name) {
         return 0;
     }
     
+    /* Create secure temporary file */
+    if (create_temp_copy(ssh_config, ssh_config_tmp, sizeof(ssh_config_tmp)) != 0) {
+        fclose(fp_in);
+        return -1;
+    }
+    
     FILE *fp_out = fopen(ssh_config_tmp, "w");
     if (!fp_out) {
         fclose(fp_in);
-        till_log(LOG_ERROR, "Cannot create temporary SSH config: %s", strerror(errno));
+        unlink(ssh_config_tmp);
+        till_log(LOG_ERROR, "Cannot open temporary SSH config: %s", strerror(errno));
         return -1;
     }
     
@@ -512,9 +541,49 @@ int remove_ssh_config_entry(const char *name) {
     
     if (rename(ssh_config_tmp, ssh_config) != 0) {
         till_log(LOG_ERROR, "Cannot update SSH config: %s", strerror(errno));
+        unlink(ssh_config_tmp);  /* Clean up temp file on error */
         return -1;
     }
     
     till_log(LOG_INFO, "Removed SSH config entry for %s", name);
+    return 0;
+}
+
+/* Create a secure temporary file using mkstemp */
+int create_temp_file(char *template, FILE **fp) {
+    int fd = mkstemp(template);
+    if (fd == -1) {
+        till_log(LOG_ERROR, "Failed to create temp file: %s", strerror(errno));
+        return -1;
+    }
+    
+    *fp = fdopen(fd, "w+");
+    if (!*fp) {
+        till_log(LOG_ERROR, "Failed to open temp file: %s", strerror(errno));
+        close(fd);
+        unlink(template);
+        return -1;
+    }
+    
+    return 0;
+}
+
+/* Create a temporary copy of a file for atomic operations */
+int create_temp_copy(const char *original, char *temp_path, size_t temp_size) {
+    /* Build temp file template */
+    snprintf(temp_path, temp_size, "%s.XXXXXX", original);
+    
+    int fd = mkstemp(temp_path);
+    if (fd == -1) {
+        till_log(LOG_ERROR, "Failed to create temp file: %s", strerror(errno));
+        return -1;
+    }
+    
+    /* Set secure permissions */
+    if (fchmod(fd, TILL_FILE_PERMS) != 0) {
+        till_log(LOG_WARN, "Failed to set temp file permissions: %s", strerror(errno));
+    }
+    
+    close(fd);
     return 0;
 }

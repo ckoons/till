@@ -109,6 +109,14 @@ int platform_schedule_exists(const char *name);
 /* List scheduled jobs */
 int platform_schedule_list(char ***names, int *count);
 
+/* Network Functions */
+
+/* Test host connectivity with ping */
+int platform_ping_host(const char *hostname, int timeout_ms);
+
+/* Test TCP port connectivity */
+int platform_test_port(const char *hostname, int port, int timeout_ms);
+
 /* File System Functions */
 
 /* Get user home directory */

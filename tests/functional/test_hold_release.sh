@@ -22,7 +22,7 @@ TILL="${TILL:-./till}"
 # Test functions
 pass() {
     echo -e "${GREEN}✓${NC} $1"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 fail() {
@@ -30,13 +30,13 @@ fail() {
     if [ ! -z "$2" ]; then
         echo "  Error: $2"
     fi
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
 run_test() {
     local test_name="$1"
     echo -e "\n${YELLOW}Running:${NC} $test_name"
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 }
 
 # Set up mock registry
@@ -89,7 +89,7 @@ setup_mock_registry
 
 # Test 1: Hold a single component
 run_test "Hold single component"
-if $TILL hold test.component.one --reason "Testing hold" 2>&1 | grep -q "Successfully held"; then
+if $TILL hold test.component.one --reason "Testing hold" </dev/null 2>&1 | grep -q "Successfully held"; then
     pass "Single component held"
 else
     fail "Failed to hold single component"
@@ -97,7 +97,7 @@ fi
 
 # Test 2: Verify hold status
 run_test "Verify hold status"
-if $TILL hold 2>&1 | grep -q "test.component.one.*HELD\|Currently Held"; then
+if $TILL hold </dev/null 2>&1 | grep -q "test.component.one.*HELD\|Currently Held"; then
     pass "Hold status shows held component"
 else
     fail "Hold status doesn't show held component"
@@ -105,7 +105,7 @@ fi
 
 # Test 3: Hold with duration
 run_test "Hold with duration"
-if $TILL hold test.component.two --duration 1h --reason "Temporary hold" 2>&1 | grep -q "Successfully held"; then
+if $TILL hold test.component.two --duration 1h --reason "Temporary hold" </dev/null 2>&1 | grep -q "Successfully held"; then
     pass "Component held with duration"
 else
     fail "Failed to hold with duration"
@@ -114,7 +114,7 @@ fi
 # Test 4: Hold with specific end time
 run_test "Hold with end time"
 END_TIME=$(date -v+1d '+%Y-%m-%d %H:%M' 2>/dev/null || date -d '+1 day' '+%Y-%m-%d %H:%M' 2>/dev/null || echo "2025-12-31 23:59")
-if $TILL hold test.component.three --until "$END_TIME" --reason "Scheduled hold" 2>&1 | grep -q "Successfully held"; then
+if $TILL hold test.component.three --until "$END_TIME" --reason "Scheduled hold" </dev/null 2>&1 | grep -q "Successfully held"; then
     pass "Component held with end time"
 else
     fail "Failed to hold with end time"
@@ -122,7 +122,7 @@ fi
 
 # Test 5: Attempt to hold already held component
 run_test "Hold already held component (should fail)"
-if $TILL hold test.component.one --reason "Duplicate hold" 2>&1 | grep -q "already held\|Failed"; then
+if $TILL hold test.component.one --reason "Duplicate hold" </dev/null 2>&1 | grep -q "already held\|Failed"; then
     pass "Duplicate hold properly rejected"
 else
     fail "Duplicate hold not properly handled"
@@ -130,7 +130,7 @@ fi
 
 # Test 6: Force hold on already held component
 run_test "Force hold on held component"
-if $TILL hold test.component.one --force --reason "Forced hold" 2>&1 | grep -q "Successfully held"; then
+if $TILL hold test.component.one --force --reason "Forced hold" </dev/null 2>&1 | grep -q "Successfully held"; then
     pass "Force hold succeeded"
 else
     fail "Force hold failed"
@@ -139,8 +139,8 @@ fi
 # Test 7: Hold multiple components
 run_test "Hold multiple components"
 # First release all
-$TILL release --all > /dev/null 2>&1
-if $TILL hold test.component.one,test.component.two --reason "Multi hold" 2>&1 | grep -q "Successfully held 2"; then
+$TILL release --all > /dev/null </dev/null 2>&1
+if $TILL hold test.component.one,test.component.two --reason "Multi hold" </dev/null 2>&1 | grep -q "Successfully held 2"; then
     pass "Multiple components held"
 else
     fail "Failed to hold multiple components"
@@ -148,7 +148,7 @@ fi
 
 # Test 8: Release single component
 run_test "Release single component"
-if $TILL release test.component.one 2>&1 | grep -q "Successfully released"; then
+if $TILL release test.component.one </dev/null 2>&1 | grep -q "Successfully released"; then
     pass "Single component released"
 else
     fail "Failed to release component"
@@ -156,7 +156,7 @@ fi
 
 # Test 9: Release non-held component
 run_test "Release non-held component"
-if $TILL release test.component.one 2>&1 | grep -q "not held\|Warning"; then
+if $TILL release test.component.one </dev/null 2>&1 | grep -q "not held\|Warning"; then
     pass "Release of non-held component handled"
 else
     fail "Release of non-held component not properly handled"
@@ -164,8 +164,8 @@ fi
 
 # Test 10: Hold all components
 run_test "Hold all components"
-$TILL release --all > /dev/null 2>&1
-if $TILL hold --all --reason "Global hold" 2>&1 | grep -q "Successfully held"; then
+$TILL release --all > /dev/null </dev/null 2>&1
+if $TILL hold --all --reason "Global hold" </dev/null 2>&1 | grep -q "Successfully held"; then
     pass "All components held"
 else
     fail "Failed to hold all components"
@@ -173,7 +173,7 @@ fi
 
 # Test 11: Verify all held
 run_test "Verify all components held"
-HOLD_STATUS=$($TILL hold 2>&1)
+HOLD_STATUS=$($TILL hold </dev/null 2>&1)
 if echo "$HOLD_STATUS" | grep -q "test.component.one.*HELD" && \
    echo "$HOLD_STATUS" | grep -q "test.component.two.*HELD" && \
    echo "$HOLD_STATUS" | grep -q "test.component.three.*HELD"; then
@@ -184,7 +184,7 @@ fi
 
 # Test 12: Release all components
 run_test "Release all components"
-if $TILL release --all 2>&1 | grep -q "Successfully released"; then
+if $TILL release --all </dev/null 2>&1 | grep -q "Successfully released"; then
     pass "All components released"
 else
     fail "Failed to release all components"
@@ -192,7 +192,7 @@ fi
 
 # Test 13: Verify all released
 run_test "Verify all components released"
-if $TILL hold 2>&1 | grep -q "No components.*held\|Currently Held: 0"; then
+if $TILL hold </dev/null 2>&1 | grep -q "No components.*held\|Currently Held: 0"; then
     pass "No components shown as held"
 else
     fail "Some components still shown as held"
@@ -200,11 +200,11 @@ fi
 
 # Test 14: Hold with very short duration
 run_test "Hold with short duration (5 seconds)"
-if $TILL hold test.component.one --duration 5s --reason "Short hold" 2>&1 | grep -q "Successfully held"; then
+if $TILL hold test.component.one --duration 5s --reason "Short hold" </dev/null 2>&1 | grep -q "Successfully held"; then
     pass "Short duration hold created"
     echo "  Waiting 6 seconds for expiration..."
     sleep 6
-    if $TILL hold 2>&1 | grep -q "test.component.one.*EXPIRED\|No components.*held"; then
+    if $TILL hold </dev/null 2>&1 | grep -q "test.component.one.*EXPIRED\|No components.*held"; then
         pass "  Hold expired as expected"
     else
         fail "  Hold did not expire"
@@ -215,9 +215,9 @@ fi
 
 # Test 15: Release expired holds
 run_test "Release expired holds"
-$TILL hold test.component.one --duration 1s --reason "To expire" > /dev/null 2>&1
+$TILL hold test.component.one --duration 1s --reason "To expire" > /dev/null </dev/null 2>&1
 sleep 2
-if $TILL release --expired 2>&1 | grep -q "released\|expired"; then
+if $TILL release --expired </dev/null 2>&1 | grep -q "released\|expired"; then
     pass "Expired holds released"
 else
     fail "Failed to release expired holds"

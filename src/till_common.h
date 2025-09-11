@@ -5,6 +5,7 @@
 #ifndef TILL_COMMON_H
 #define TILL_COMMON_H
 
+#include <stdio.h>
 #include <limits.h>
 #include "cJSON.h"
 #include "till_constants.h"
@@ -87,5 +88,9 @@ int foreach_dir_entry(const char *path, dir_entry_fn callback, void *context);
 /* Symlink utilities */
 int create_or_update_symlink(const char *target, const char *link_path);
 int symlink_points_to(const char *link_path, const char *expected_target);
+
+/* Secure temporary file creation */
+int create_temp_file(char *template, FILE **fp);
+int create_temp_copy(const char *original, char *temp_path, size_t temp_size);
 
 #endif /* TILL_COMMON_H */

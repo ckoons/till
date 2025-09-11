@@ -22,7 +22,7 @@ TILL="${TILL:-./till}"
 # Test functions
 pass() {
     echo -e "${GREEN}✓${NC} $1"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 fail() {
@@ -30,13 +30,13 @@ fail() {
     if [ ! -z "$2" ]; then
         echo "  Error: $2"
     fi
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
 run_test() {
     local test_name="$1"
     echo -e "\n${YELLOW}Running:${NC} $test_name"
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 }
 
 # Clean up function
@@ -59,8 +59,8 @@ fi
 
 # Test 1: Version command
 run_test "Version command"
-if $TILL --version > /dev/null 2>&1; then
-    VERSION=$($TILL --version | head -1)
+if $TILL --version </dev/null > /dev/null 2>&1; then
+    VERSION=$($TILL --version </dev/null | head -1)
     pass "Version command works: $VERSION"
 else
     fail "Version command failed"
@@ -68,7 +68,7 @@ fi
 
 # Test 2: Help command
 run_test "Help command"
-if $TILL --help > /dev/null 2>&1; then
+if $TILL --help </dev/null > /dev/null 2>&1; then
     pass "Help command works"
 else
     fail "Help command failed"
@@ -78,7 +78,7 @@ fi
 run_test "Command-specific help"
 COMMANDS="install host sync schedule hold release"
 for cmd in $COMMANDS; do
-    if $TILL $cmd --help > /dev/null 2>&1; then
+    if $TILL $cmd --help </dev/null > /dev/null 2>&1; then
         pass "  $cmd --help works"
     else
         fail "  $cmd --help failed"
@@ -87,7 +87,7 @@ done
 
 # Test 4: Invalid command handling
 run_test "Invalid command handling"
-if $TILL invalid-command 2>&1 | grep -q "Unknown command"; then
+if $TILL invalid-command </dev/null 2>&1 | grep -q "Unknown command"; then
     pass "Invalid command properly rejected"
 else
     fail "Invalid command not properly handled"
@@ -95,7 +95,7 @@ fi
 
 # Test 5: Discovery without installations
 run_test "Discovery (no installations)"
-OUTPUT=$($TILL sync 2>&1 | tail -5)
+OUTPUT=$($TILL sync </dev/null 2>&1 | tail -5)
 if echo "$OUTPUT" | grep -q "Tekton installation"; then
     pass "Discovery runs without error"
 else
@@ -104,7 +104,7 @@ fi
 
 # Test 6: Hold command without components
 run_test "Hold status (empty)"
-if $TILL hold 2>&1 | grep -q "No components\|hold"; then
+if $TILL hold </dev/null 2>&1 | grep -q "No components\|hold"; then
     pass "Hold status command works"
 else
     fail "Hold status command failed"
@@ -112,7 +112,7 @@ fi
 
 # Test 7: Release command without holds
 run_test "Release status (empty)"
-if $TILL release 2>&1 | grep -q "No components\|hold\|release"; then
+if $TILL release </dev/null 2>&1 | grep -q "No components\|hold\|release"; then
     pass "Release status command works"
 else
     fail "Release status command failed"
@@ -120,7 +120,7 @@ fi
 
 # Test 8: Schedule command
 run_test "Schedule list (empty)"
-if $TILL schedule list 2>&1 | grep -q "schedule\|Schedule"; then
+if $TILL schedule list </dev/null 2>&1 | grep -q "schedule\|Schedule"; then
     pass "Schedule list command works"
 else
     fail "Schedule list command failed"
@@ -129,7 +129,7 @@ fi
 # Test 9: Environment variables
 run_test "Environment variable handling"
 export TILL_LOG_LEVEL=DEBUG
-if $TILL --version 2>&1 | grep -q "DEBUG\|version"; then
+if $TILL --version </dev/null 2>&1 | grep -q "DEBUG\|version"; then
     pass "Environment variables respected"
 else
     fail "Environment variables not working"
@@ -139,12 +139,12 @@ unset TILL_LOG_LEVEL
 # Test 10: Lock file handling
 run_test "Lock file handling"
 # Start a background process that holds the lock
-$TILL sync > /dev/null 2>&1 &
+$TILL sync </dev/null > /dev/null 2>&1 &
 PID=$!
 sleep 0.5
 
 # Try to run another command that needs the lock
-if $TILL sync 2>&1 | grep -q "Another instance\|lock\|busy"; then
+if $TILL sync </dev/null 2>&1 | grep -q "Another instance\|lock\|busy"; then
     pass "Lock file prevents concurrent execution"
 else
     # May have completed too fast
