@@ -303,17 +303,69 @@ int cmd_install(int argc, char *argv[]) {
         snprintf(default_path, sizeof(default_path), "%s/%s/%s",
                 home, TILL_PROJECTS_BASE, opts.name);
         
-        printf("Path [%s]: ", default_path);
-        char path_input[TILL_MAX_PATH];
-        if (fgets(path_input, sizeof(path_input), stdin)) {
-            path_input[strcspn(path_input, "\n")] = 0;  /* Remove newline */
-            if (strlen(path_input) > 0) {
-                strncpy(opts.path, path_input, sizeof(opts.path) - 1);
+        /* Check if default path exists and warn */
+        struct stat st;
+        int path_valid = 0;
+        while (!path_valid) {
+            printf("Path [%s]: ", default_path);
+            char path_input[TILL_MAX_PATH];
+            if (fgets(path_input, sizeof(path_input), stdin)) {
+                path_input[strcspn(path_input, "\n")] = 0;  /* Remove newline */
+                if (strlen(path_input) > 0) {
+                    strncpy(opts.path, path_input, sizeof(opts.path) - 1);
+                } else {
+                    strncpy(opts.path, default_path, sizeof(opts.path) - 1);
+                }
             } else {
                 strncpy(opts.path, default_path, sizeof(opts.path) - 1);
             }
-        } else {
-            strncpy(opts.path, default_path, sizeof(opts.path) - 1);
+            
+            /* Validate the path */
+            if (stat(opts.path, &st) == 0) {
+                /* Path exists - check what it is */
+                if (S_ISDIR(st.st_mode)) {
+                    /* Check if it's empty or a git repo */
+                    char git_check[TILL_MAX_PATH + 20];
+                    snprintf(git_check, sizeof(git_check), "%s/.git", opts.path);
+                    if (stat(git_check, &st) == 0) {
+                        printf("⚠️  Path exists and contains a git repository.\n");
+                        printf("   Use a different path or remove the existing directory.\n");
+                        /* Update default for next prompt */
+                        snprintf(default_path, sizeof(default_path), "%s/%s/%s-new",
+                                home, TILL_PROJECTS_BASE, opts.name);
+                    } else {
+                        /* Check if directory is empty */
+                        char check_cmd[TILL_MAX_PATH + 50];
+                        snprintf(check_cmd, sizeof(check_cmd), "ls -A '%s' 2>/dev/null | wc -l", opts.path);
+                        FILE *fp = popen(check_cmd, "r");
+                        if (fp) {
+                            int count = 0;
+                            fscanf(fp, "%d", &count);
+                            pclose(fp);
+                            if (count > 0) {
+                                printf("⚠️  Path exists and is not empty.\n");
+                                printf("   Use a different path or remove the existing directory.\n");
+                                /* Update default for next prompt */
+                                snprintf(default_path, sizeof(default_path), "%s/%s/%s-new",
+                                        home, TILL_PROJECTS_BASE, opts.name);
+                            } else {
+                                /* Empty directory is OK */
+                                path_valid = 1;
+                            }
+                        } else {
+                            path_valid = 1;  /* Assume OK if we can't check */
+                        }
+                    }
+                } else {
+                    printf("⚠️  Path exists but is not a directory.\n");
+                    /* Update default for next prompt */
+                    snprintf(default_path, sizeof(default_path), "%s/%s/%s-alt",
+                            home, TILL_PROJECTS_BASE, opts.name);
+                }
+            } else {
+                /* Path doesn't exist - that's fine */
+                path_valid = 1;
+            }
         }
         
         /* 3. Prompt for Federation Mode */
