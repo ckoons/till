@@ -139,6 +139,12 @@ int generate_tekton_env(install_options_t *opts) {
                 fputs(line, fp_out);
             }
         }
+        else if (strcmp(key, "TEKTON_PORT_BASE") == 0) {
+            fprintf(fp_out, "TEKTON_PORT_BASE=%d\n", opts->port_base);
+        }
+        else if (strcmp(key, "TEKTON_AI_PORT_BASE") == 0) {
+            fprintf(fp_out, "TEKTON_AI_PORT_BASE=%d\n", opts->ai_port_base);
+        }
         /* Handle port assignments */
         else if (strstr(key, "_PORT") != NULL) {
             /* Find port offset for this component */
