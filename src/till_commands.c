@@ -199,21 +199,27 @@ int cmd_install(int argc, char *argv[]) {
     }
     
     /* Parse arguments */
+    int has_args = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
             strncpy(opts.mode, argv[++i], sizeof(opts.mode) - 1);
+            has_args = 1;
         }
         else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             strncpy(opts.name, argv[++i], sizeof(opts.name) - 1);
+            has_args = 1;
         }
         else if (strcmp(argv[i], "--path") == 0 && i + 1 < argc) {
             strncpy(opts.path, argv[++i], sizeof(opts.path) - 1);
+            has_args = 1;
         }
         else if (strcmp(argv[i], "--port-base") == 0 && i + 1 < argc) {
             opts.port_base = atoi(argv[++i]);
+            has_args = 1;
         }
         else if (strcmp(argv[i], "--ai-port-base") == 0 && i + 1 < argc) {
             opts.ai_port_base = atoi(argv[++i]);
+            has_args = 1;
         }
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Till Install - Install Tekton\n\n");
@@ -230,6 +236,96 @@ int cmd_install(int argc, char *argv[]) {
             printf("  till install --mode solo            # Solo mode\n");
             printf("  till install --mode coder-a         # Development environment\n");
             return 0;
+        }
+    }
+    
+    /* Interactive mode - prompt for missing options */
+    if (g_interactive && !has_args) {
+        printf("\nTekton Interactive Installation\n");
+        printf("================================\n\n");
+        
+        /* Prompt for mode */
+        printf("Installation mode:\n");
+        printf("  1. solo     - Standalone installation\n");
+        printf("  2. observer - Read-only federation member\n");
+        printf("  3. member   - Full federation member\n");
+        printf("  4. coder-a  - Development environment A\n");
+        printf("  5. coder-b  - Development environment B\n");
+        printf("  6. coder-c  - Development environment C\n");
+        printf("\nSelect mode [1-6] (default: 1): ");
+        
+        char choice[10];
+        if (fgets(choice, sizeof(choice), stdin)) {
+            int mode_choice = atoi(choice);
+            switch (mode_choice) {
+                case 2: strncpy(opts.mode, MODE_OBSERVER, sizeof(opts.mode) - 1); break;
+                case 3: strncpy(opts.mode, MODE_MEMBER, sizeof(opts.mode) - 1); break;
+                case 4: strncpy(opts.mode, "coder-a", sizeof(opts.mode) - 1); break;
+                case 5: strncpy(opts.mode, "coder-b", sizeof(opts.mode) - 1); break;
+                case 6: strncpy(opts.mode, "coder-c", sizeof(opts.mode) - 1); break;
+                default: strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1); break;
+            }
+        }
+        
+        /* Prompt for name */
+        printf("\nInstallation name (e.g., 'primary', 'coder-a'): ");
+        char name_input[256];
+        if (fgets(name_input, sizeof(name_input), stdin)) {
+            name_input[strcspn(name_input, "\n")] = 0;  /* Remove newline */
+            if (strlen(name_input) > 0) {
+                strncpy(opts.name, name_input, sizeof(opts.name) - 1);
+            }
+        }
+        
+        /* Prompt for path */
+        char *home = getenv("HOME");
+        char default_path[TILL_MAX_PATH];
+        snprintf(default_path, sizeof(default_path), "%s/%s/%s",
+                home, TILL_PROJECTS_BASE,
+                strlen(opts.name) > 0 ? opts.name : "tekton");
+        
+        printf("\nInstallation path (default: %s): ", default_path);
+        char path_input[TILL_MAX_PATH];
+        if (fgets(path_input, sizeof(path_input), stdin)) {
+            path_input[strcspn(path_input, "\n")] = 0;  /* Remove newline */
+            if (strlen(path_input) > 0) {
+                strncpy(opts.path, path_input, sizeof(opts.path) - 1);
+            }
+        }
+        
+        /* Prompt for ports */
+        printf("\nBase port for services (default: %d): ", DEFAULT_PORT_BASE);
+        char port_input[32];
+        if (fgets(port_input, sizeof(port_input), stdin)) {
+            int port = atoi(port_input);
+            if (port > 0) {
+                opts.port_base = port;
+            }
+        }
+        
+        printf("Base port for AI services (default: %d): ", DEFAULT_AI_PORT_BASE);
+        if (fgets(port_input, sizeof(port_input), stdin)) {
+            int port = atoi(port_input);
+            if (port > 0) {
+                opts.ai_port_base = port;
+            }
+        }
+        
+        /* Show summary */
+        printf("\nInstallation Summary:\n");
+        printf("  Mode: %s\n", opts.mode);
+        printf("  Name: %s\n", strlen(opts.name) > 0 ? opts.name : "(auto-generated)");
+        printf("  Path: %s\n", strlen(opts.path) > 0 ? opts.path : default_path);
+        printf("  Port Base: %d\n", opts.port_base);
+        printf("  AI Port Base: %d\n", opts.ai_port_base);
+        printf("\nProceed with installation? [Y/n]: ");
+        
+        char confirm[10];
+        if (fgets(confirm, sizeof(confirm), stdin)) {
+            if (confirm[0] == 'n' || confirm[0] == 'N') {
+                printf("Installation cancelled.\n");
+                return 0;
+            }
         }
     }
     
