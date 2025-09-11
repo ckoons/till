@@ -101,32 +101,33 @@ clean:
 	@rm -f $(TARGET)
 	@echo "Clean complete"
 
-# Install (copies to /usr/local/bin) - requires sudo
+# Install - smart install that tries system-wide first, falls back to user
 install: $(TARGET)
-	@echo "Installing till to /usr/local/bin..."
-	@cp $(TARGET) /usr/local/bin/
-	@chmod +x /usr/local/bin/till
-	@echo "Installation complete"
+	@if [ -w /usr/local/bin ]; then \
+		echo "Installing till to /usr/local/bin..."; \
+		cp $(TARGET) /usr/local/bin/; \
+		chmod +x /usr/local/bin/till; \
+		echo "Installation complete in /usr/local/bin"; \
+	else \
+		echo "Installing till to ~/.local/bin (no sudo access)..."; \
+		mkdir -p $(HOME)/.local/bin; \
+		cp $(TARGET) $(HOME)/.local/bin/; \
+		chmod +x $(HOME)/.local/bin/till; \
+		echo "Installation complete in ~/.local/bin"; \
+		if ! echo $$PATH | grep -q "$$HOME/.local/bin"; then \
+			echo ""; \
+			echo "WARNING: ~/.local/bin is not in your PATH"; \
+			echo "Add this to your shell configuration:"; \
+			echo '  export PATH="$$HOME/.local/bin:$$PATH"'; \
+		fi; \
+	fi
 	@echo "You can now run 'till' from anywhere"
 
-# Install to user's home directory - no sudo required
-install-user: $(TARGET)
-	@echo "Installing till to ~/.local/bin..."
-	@mkdir -p $(HOME)/.local/bin
-	@cp $(TARGET) $(HOME)/.local/bin/
-	@chmod +x $(HOME)/.local/bin/till
-	@echo "Installation complete"
-	@echo ""
-	@echo "Add the following to your shell configuration (.bashrc or .zshrc):"
-	@echo '  export PATH="$$HOME/.local/bin:$$PATH"'
-	@echo ""
-	@echo "Or create an alias:"
-	@echo "  alias till='$(CURDIR)/till'"
-
-# Uninstall
+# Uninstall - removes from both locations
 uninstall:
-	@echo "Removing till from /usr/local/bin..."
-	@rm -f /usr/local/bin/till
+	@echo "Removing till..."
+	@rm -f /usr/local/bin/till 2>/dev/null || true
+	@rm -f $(HOME)/.local/bin/till 2>/dev/null || true
 	@echo "Uninstall complete"
 
 # Run tests (to be implemented)
@@ -157,9 +158,8 @@ help:
 	@echo "Targets:"
 	@echo "  all         - Build till (default)"
 	@echo "  clean       - Remove build files"
-	@echo "  install     - Install to /usr/local/bin (requires sudo)"
-	@echo "  install-user- Install to ~/.local/bin (no sudo)"
-	@echo "  uninstall   - Remove from /usr/local/bin"
+	@echo "  install     - Install till (auto-detects best location)"
+	@echo "  uninstall   - Remove till from system"
 	@echo "  debug       - Build with debug symbols"
 	@echo "  test        - Run basic tests"
 	@echo "  info        - Show build configuration"
