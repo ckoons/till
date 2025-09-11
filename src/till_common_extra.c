@@ -495,9 +495,37 @@ int symlink_points_to(const char *link_path, const char *expected_target) {
 /* SSH command utilities */
 int build_ssh_command(char *cmd, size_t size, const char *user, const char *host, 
                       int port, const char *remote_cmd) {
-    return snprintf(cmd, size, 
-        "ssh -o ConnectTimeout=5 -o BatchMode=yes %s@%s -p %d '%s' 2>/dev/null",
-        user, host, port, remote_cmd ? remote_cmd : "");
+    /* Validate inputs */
+    if (!cmd || size == 0 || !user || !host) {
+        return -1;
+    }
+    
+    /* Build base command */
+    int len = snprintf(cmd, size, 
+        "ssh -o ConnectTimeout=5 -o BatchMode=yes %s@%s -p %d",
+        user, host, port);
+    
+    if (len < 0 || (size_t)len >= size) {
+        return -1;
+    }
+    
+    /* Add remote command if provided (properly quoted) */
+    if (remote_cmd && remote_cmd[0]) {
+        /* Simple quoting - for more complex cases use build_ssh_command_safe */
+        int cmd_len = snprintf(cmd + len, size - len, " '%s' 2>/dev/null", remote_cmd);
+        if (cmd_len < 0 || len + cmd_len >= (int)size) {
+            return -1;
+        }
+        len += cmd_len;
+    } else {
+        int suffix_len = snprintf(cmd + len, size - len, " 2>/dev/null");
+        if (suffix_len < 0 || len + suffix_len >= (int)size) {
+            return -1;
+        }
+        len += suffix_len;
+    }
+    
+    return len;
 }
 
 int run_ssh_command(const char *user, const char *host, int port, 

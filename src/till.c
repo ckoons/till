@@ -25,6 +25,7 @@
 #include "till_run.h"
 #include "till_commands.h"
 #include "till_common.h"
+#include "till_security.h"
 #include "cJSON.h"
 
 /* Global flags */
@@ -380,11 +381,12 @@ int self_update_till(void) {
     
     /* 1. LOCK - Prevent concurrent updates */
     snprintf(lock_file, sizeof(lock_file), "%s/.till-update.lock", till_dir);
-    lock_fd = open(lock_file, O_CREAT | O_EXCL | O_WRONLY, 0644);
+    lock_fd = acquire_lock_file(lock_file, 5000);  /* 5 second timeout */
     if (lock_fd < 0) {
-        if (errno == EEXIST) {
-            printf("⚠️  Another till update in progress\n");
-            return -1;
+        if (errno == ETIMEDOUT) {
+            printf("⚠️  Another till update in progress (timed out waiting)\n");
+        } else {
+            printf("⚠️  Could not acquire update lock\n");
         }
         return -1;
     }
@@ -400,8 +402,7 @@ int self_update_till(void) {
     
     if (rename(current_exe, backup_path) != 0) {
         printf("   ❌ Backup failed: %s\n", strerror(errno));
-        close(lock_fd);
-        unlink(lock_file);
+        release_lock_file(lock_fd);
         return -1;
     }
     
@@ -442,8 +443,7 @@ int self_update_till(void) {
     pipe = popen(cmd, "r");
     if (!pipe) {
         rollback_till(backup_path, current_exe);
-        close(lock_fd);
-        unlink(lock_file);
+        release_lock_file(lock_fd);
         return -1;
     }
     
@@ -467,8 +467,7 @@ int self_update_till(void) {
     if (status != 0 || !success) {
         printf("   ❌ Git pull failed, rolling back\n");
         rollback_till(backup_path, current_exe);
-        close(lock_fd);
-        unlink(lock_file);
+        release_lock_file(lock_fd);
         return -1;
     }
     
@@ -498,8 +497,7 @@ int self_update_till(void) {
             till_error("Failed to reset git repository");
         }
         
-        close(lock_fd);
-        unlink(lock_file);
+        release_lock_file(lock_fd);
         return -1;
     }
     
@@ -510,8 +508,7 @@ int self_update_till(void) {
     if (!pipe) {
         printf("   ❌ Verification failed, rolling back\n");
         rollback_till(backup_path, current_exe);
-        close(lock_fd);
-        unlink(lock_file);
+        release_lock_file(lock_fd);
         return -1;
     }
     
@@ -524,8 +521,7 @@ int self_update_till(void) {
     if (status != 0) {
         printf("   ❌ Verification failed, rolling back\n");
         rollback_till(backup_path, current_exe);
-        close(lock_fd);
-        unlink(lock_file);
+        release_lock_file(lock_fd);
         return -1;
     }
     

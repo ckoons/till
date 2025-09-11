@@ -16,6 +16,7 @@
 #include "till_config.h"
 #include "till_host.h"
 #include "till_common.h"
+#include "till_security.h"
 #include "cJSON.h"
 
 #ifndef PATH_MAX
@@ -371,13 +372,11 @@ int till_host_ssh(const char *name, int argc, char *argv[]) {
     
     till_log(LOG_INFO, "SSH session to host '%s'", name);
     
-    /* Build SSH command with any additional arguments */
+    /* Build SSH command with properly escaped arguments */
     char ssh_cmd[4096];
-    int offset = snprintf(ssh_cmd, sizeof(ssh_cmd), "ssh %s@%s -p %d", 
-                         user, hostname, port);
-    
-    for (int i = 0; i < argc && offset < (int)sizeof(ssh_cmd) - 1; i++) {
-        offset += snprintf(ssh_cmd + offset, sizeof(ssh_cmd) - offset, " %s", argv[i]);
+    if (build_ssh_command_safe(ssh_cmd, sizeof(ssh_cmd), user, hostname, port, argc, argv) != 0) {
+        till_error("Failed to build SSH command - invalid arguments");
+        return -1;
     }
     
     return system(ssh_cmd);
