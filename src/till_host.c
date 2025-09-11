@@ -288,9 +288,11 @@ int till_host_setup(const char *name) {
         char install_cmd[2048];
         snprintf(install_cmd, sizeof(install_cmd),
             "mkdir -p ~/%s && cd ~/%s && "
-            "git clone %s " TILL_REMOTE_INSTALL_PATH " && "
-            "cd " TILL_REMOTE_INSTALL_PATH " && make",
-            TILL_PROJECTS_BASE, TILL_PROJECTS_BASE, TILL_REPO_URL);
+            "git clone %s.git %s && "
+            "cd %s && make",
+            TILL_PROJECTS_BASE, TILL_PROJECTS_BASE, 
+            TILL_REPO_URL, TILL_GITHUB_REPO,
+            TILL_GITHUB_REPO);
         
         if (run_ssh_command(user, hostname, port, install_cmd, NULL, 0) != 0) {
             till_log(LOG_ERROR, "Failed to install Till on host '%s'", name);
