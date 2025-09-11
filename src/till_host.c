@@ -567,6 +567,12 @@ int till_host_command(int argc, char *argv[]) {
     
     const char *subcmd = argv[1];
     
+    /* Check for help flag */
+    if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "-h") == 0) {
+        print_host_help();
+        return 0;
+    }
+    
     if (strcmp(subcmd, "add") == 0) {
         if (argc < 4) {
             till_error("Usage: till host add <name> <user>@<host>[:port]\n");

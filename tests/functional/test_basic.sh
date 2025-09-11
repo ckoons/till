@@ -76,7 +76,7 @@ fi
 
 # Test 3: Command help pages
 run_test "Command-specific help"
-COMMANDS="install host sync schedule hold release"
+COMMANDS="install host sync watch hold release"
 for cmd in $COMMANDS; do
     if $TILL $cmd --help </dev/null > /dev/null 2>&1; then
         pass "  $cmd --help works"
