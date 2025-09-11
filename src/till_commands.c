@@ -16,6 +16,7 @@
 #include "till_commands.h"
 #include "till_install.h"
 #include "till_host.h"
+#include "till_hold.h"
 #include "till_schedule.h"
 #include "till_run.h"
 #include "till_registry.h"
@@ -89,8 +90,11 @@ int cmd_sync(int argc, char *argv[]) {
         return 0;
     }
     
+    /* Clean up expired holds first */
+    cleanup_expired_holds();
+    
     /* Sync each installation */
-    int total = 0, updated = 0, failed = 0;
+    int total = 0, updated = 0, failed = 0, held = 0;
     
     cJSON *inst;
     cJSON_ArrayForEach(inst, installations) {
@@ -101,6 +105,27 @@ int cmd_sync(int argc, char *argv[]) {
         
         total++;
         printf("Checking %s...\n", name);
+        
+        /* Check if component is held */
+        if (is_component_held(name)) {
+            hold_info_t hold_info;
+            if (get_hold_info(name, &hold_info) == 0) {
+                printf("  🔒 HELD");
+                if (hold_info.reason[0]) {
+                    printf(" - %s", hold_info.reason);
+                }
+                if (hold_info.expires_at > 0) {
+                    char time_buf[64];
+                    format_time(hold_info.expires_at, time_buf, sizeof(time_buf));
+                    printf(" (until %s)", time_buf);
+                }
+                printf("\n");
+            } else {
+                printf("  🔒 HELD\n");
+            }
+            held++;
+            continue;
+        }
         
         if (dry_run) {
             /* Just check status */
@@ -131,8 +156,15 @@ int cmd_sync(int argc, char *argv[]) {
     printf("  Total: %d installations\n", total);
     if (!dry_run) {
         printf("  Updated: %d\n", updated);
+        if (held > 0) {
+            printf("  Held: %d\n", held);
+        }
         if (failed > 0) {
             printf("  Failed: %d\n", failed);
+        }
+    } else {
+        if (held > 0) {
+            printf("  Held: %d (would be skipped)\n", held);
         }
     }
     
@@ -301,28 +333,12 @@ int cmd_uninstall(int argc, char *argv[]) {
 
 /* Command: hold - Prevent component updates */
 int cmd_hold(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-    if (argc < 2) {
-        till_error("Usage: till hold <component>");
-        return EXIT_USAGE_ERROR;
-    }
-    
-    till_info("Hold functionality not yet implemented");
-    return 0;
+    return till_hold_command(argc, argv);
 }
 
 /* Command: release - Allow component updates */
 int cmd_release(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-    if (argc < 2) {
-        till_error("Usage: till release <component>");
-        return EXIT_USAGE_ERROR;
-    }
-    
-    till_info("Release functionality not yet implemented");
-    return 0;
+    return till_release_command(argc, argv);
 }
 
 /* Command: host - Manage remote hosts */

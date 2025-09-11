@@ -149,15 +149,21 @@ int get_till_dir(char *path, size_t size) {
     /* 3. Check known locations */
     char *home = getenv("HOME");
     if (home) {
-        /* Check projects/github/till/.till */
-        snprintf(test_path, sizeof(test_path), "%s/%s/till/%s", home, TILL_PROJECTS_BASE, TILL_DIR_NAME);
+        /* Check ~/.till first (standard location) */
+        snprintf(test_path, sizeof(test_path), "%s/%s", home, TILL_DIR_NAME);
         if (path_exists(test_path)) {
             strncpy(path, test_path, size - 1);
             path[size - 1] = '\0';
             return 0;
         }
         
-        /* REMOVED: We do NOT check ~/.till anymore - only project directory */
+        /* Then check projects/github/till/.till */
+        snprintf(test_path, sizeof(test_path), "%s/%s/till/%s", home, TILL_PROJECTS_BASE, TILL_DIR_NAME);
+        if (path_exists(test_path)) {
+            strncpy(path, test_path, size - 1);
+            path[size - 1] = '\0';
+            return 0;
+        }
     }
     
     /* 4. Try to find via the till executable */
@@ -291,12 +297,23 @@ int save_json_file(const char *path, cJSON *json) {
     FILE *fp = fopen(path, "w");
     if (!fp) {
         free(output);
-        till_log(LOG_ERROR, "Cannot open file %s for writing: %s", path, strerror(errno));
+        till_error("Cannot open file %s for writing: %s", path, strerror(errno));
         return -1;
     }
     
-    fprintf(fp, "%s", output);
-    fclose(fp);
+    if (fprintf(fp, "%s", output) < 0) {
+        till_error("Failed to write to %s", path);
+        fclose(fp);
+        free(output);
+        return -1;
+    }
+    
+    if (fclose(fp) != 0) {
+        till_error("Failed to close %s: %s", path, strerror(errno));
+        free(output);
+        return -1;
+    }
+    
     free(output);
     
     till_log(LOG_DEBUG, "Saved JSON to %s", path);
@@ -335,10 +352,31 @@ cJSON* load_till_json(const char *filename) {
 /* Save JSON file to Till directory */
 int save_till_json(const char *filename, cJSON *json) {
     char path[PATH_MAX];
+    fprintf(stderr, "DEBUG: save_till_json called with filename: %s\n", filename);
     if (build_till_path(path, sizeof(path), filename) != 0) {
+        till_error("Failed to build path for %s", filename);
         return -1;
     }
-    return save_json_file(path, json);
+    fprintf(stderr, "DEBUG: Built path: %s\n", path);
+    
+    /* Ensure parent directory exists */
+    char *last_slash = strrchr(path, '/');
+    if (last_slash) {
+        *last_slash = '\0';
+        fprintf(stderr, "DEBUG: Creating directory: %s\n", path);
+        if (ensure_directory(path) != 0) {
+            till_error("Failed to create directory %s", path);
+            *last_slash = '/';
+            return -1;
+        }
+        *last_slash = '/';
+    }
+    
+    fprintf(stderr, "DEBUG: Calling save_json_file with path: %s\n", path);
+    till_debug("Saving JSON to path: %s", path);
+    int result = save_json_file(path, json);
+    fprintf(stderr, "DEBUG: save_json_file returned: %d\n", result);
+    return result;
 }
 
 /* Run command and capture output */

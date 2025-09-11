@@ -211,7 +211,10 @@ int discover_tektons(void) {
     }
     
     /* Save registry */
-    if (save_till_json("tekton/till-private.json", registry) == 0) {
+    fprintf(stderr, "DEBUG: Attempting to save registry with %d installations\n", found_count);
+    int save_result = save_till_json("tekton/till-private.json", registry);
+    fprintf(stderr, "DEBUG: save_till_json returned %d\n", save_result);
+    if (save_result == 0) {
         if (found_count > 0) {
             printf("Found %d Tekton installation(s) - registry updated\n", found_count);
         } else {
@@ -219,7 +222,7 @@ int discover_tektons(void) {
         }
         till_log(LOG_INFO, "Discovery complete: %d installations found", found_count);
     } else {
-        till_log(LOG_ERROR, "Failed to save registry");
+        till_error("Failed to save registry (error: %d)", save_result);
     }
     
     cJSON_Delete(registry);

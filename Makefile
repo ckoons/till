@@ -29,11 +29,11 @@ BIN_DIR = .
 TARGET = $(BIN_DIR)/till
 
 # Source files
-SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_common_extra.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/till_commands.c $(SRC_DIR)/till_platform.c $(SRC_DIR)/till_platform_process.c $(SRC_DIR)/till_platform_schedule.c $(SRC_DIR)/till_security.c $(SRC_DIR)/cJSON.c
-HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/till_commands.h $(SRC_DIR)/till_platform.h $(SRC_DIR)/till_security.h $(SRC_DIR)/cJSON.h
+SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_hold.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_common_extra.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/till_commands.c $(SRC_DIR)/till_platform.c $(SRC_DIR)/till_platform_process.c $(SRC_DIR)/till_platform_schedule.c $(SRC_DIR)/till_security.c $(SRC_DIR)/cJSON.c
+HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_hold.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/till_commands.h $(SRC_DIR)/till_platform.h $(SRC_DIR)/till_security.h $(SRC_DIR)/cJSON.h
 
 # Object files
-OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_common_extra.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/till_commands.o $(BUILD_DIR)/till_platform.o $(BUILD_DIR)/till_platform_process.o $(BUILD_DIR)/till_platform_schedule.o $(BUILD_DIR)/till_security.o $(BUILD_DIR)/cJSON.o
+OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_hold.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_common_extra.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/till_commands.o $(BUILD_DIR)/till_platform.o $(BUILD_DIR)/till_platform_process.o $(BUILD_DIR)/till_platform_schedule.o $(BUILD_DIR)/till_security.o $(BUILD_DIR)/cJSON.o
 
 # Default target
 all: $(TARGET)
@@ -65,6 +65,10 @@ $(BUILD_DIR)/till_tekton.o: $(SRC_DIR)/till_tekton.c $(HEADERS)
 $(BUILD_DIR)/till_host.o: $(SRC_DIR)/till_host.c $(HEADERS)
 	@echo "Compiling till_host.c..."
 	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_host.c -o $(BUILD_DIR)/till_host.o
+
+$(BUILD_DIR)/till_hold.o: $(SRC_DIR)/till_hold.c $(HEADERS)
+	@echo "Compiling till_hold.c..."
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_hold.c -o $(BUILD_DIR)/till_hold.o
 
 $(BUILD_DIR)/till_schedule.o: $(SRC_DIR)/till_schedule.c $(HEADERS)
 	@echo "Compiling till_schedule.c..."
@@ -146,12 +150,11 @@ uninstall:
 	@rm -f $(HOME)/.local/bin/till 2>/dev/null || true
 	@echo "Uninstall complete"
 
-# Run tests (to be implemented)
+# Run tests
 test: $(TARGET)
-	@echo "Running tests..."
-	@./$(TARGET) --version
-	@./$(TARGET) --help > /dev/null
-	@echo "Basic tests passed"
+	@echo "Running Till test suite..."
+	@chmod +x tests/run_tests.sh tests/*/*.sh
+	@./tests/run_tests.sh
 
 # Debug build
 debug:
