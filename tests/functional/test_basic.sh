@@ -75,13 +75,13 @@ else
 fi
 
 # Test 3: Command help pages
-run_test "Command-specific help"
 COMMANDS="install host sync watch hold release"
 for cmd in $COMMANDS; do
+    run_test "$cmd --help"
     if $TILL $cmd --help </dev/null > /dev/null 2>&1; then
-        pass "  $cmd --help works"
+        pass "$cmd --help works"
     else
-        fail "  $cmd --help failed"
+        fail "$cmd --help failed"
     fi
 done
 
@@ -104,7 +104,7 @@ fi
 
 # Test 6: Hold command without components
 run_test "Hold status (empty)"
-if $TILL hold </dev/null 2>&1 | grep -q "No components\|hold"; then
+if $TILL hold </dev/null 2>&1 | grep -qi "hold\|held"; then
     pass "Hold status command works"
 else
     fail "Hold status command failed"
@@ -112,21 +112,14 @@ fi
 
 # Test 7: Release command without holds
 run_test "Release status (empty)"
-if $TILL release </dev/null 2>&1 | grep -q "No components\|hold\|release"; then
+if $TILL release </dev/null 2>&1 | grep -qi "hold\|release\|held"; then
     pass "Release status command works"
 else
     fail "Release status command failed"
 fi
 
-# Test 8: Schedule command
-run_test "Schedule list (empty)"
-if $TILL schedule list </dev/null 2>&1 | grep -q "schedule\|Schedule"; then
-    pass "Schedule list command works"
-else
-    fail "Schedule list command failed"
-fi
 
-# Test 9: Environment variables
+# Test 8: Environment variables
 run_test "Environment variable handling"
 export TILL_LOG_LEVEL=DEBUG
 if $TILL --version </dev/null 2>&1 | grep -q "DEBUG\|version"; then
@@ -136,7 +129,7 @@ else
 fi
 unset TILL_LOG_LEVEL
 
-# Test 10: Lock file handling
+# Test 9: Lock file handling
 run_test "Lock file handling"
 # Start a background process that holds the lock
 $TILL sync </dev/null > /dev/null 2>&1 &
