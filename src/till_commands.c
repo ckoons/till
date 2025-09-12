@@ -545,13 +545,7 @@ int cmd_host(int argc, char *argv[]) {
     return till_host_command(argc, argv);
 }
 
-/* Command: federate - Manage federation */
-int cmd_federate(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-    till_info("Federation functionality not yet implemented");
-    return 0;
-}
+/* Command: federate - Implemented in till_federation.c */
 
 /* Command: status - Show Till status */
 int cmd_status(int argc, char *argv[]) {

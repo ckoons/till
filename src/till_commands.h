@@ -39,6 +39,7 @@ int cmd_set(int argc, char **argv);
 int cmd_get(int argc, char **argv);
 int cmd_help(int argc, char **argv);
 int cmd_version(int argc, char **argv);
+int cmd_federate(int argc, char **argv);
 
 /* Special function for dry run mode */
 int cmd_dry_run(void);

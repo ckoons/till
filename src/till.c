@@ -57,7 +57,7 @@ static const command_def_t commands[] = {
     {"hold",      cmd_hold,      "Prevent component updates", 0},
     {"release",   cmd_release,   "Allow component updates", 0},
     {"host",      cmd_host,      "Manage remote hosts", 0},
-    {"federate",  cmd_federate,  "Manage federation", 0},
+    {"federate",  cmd_federate,  "Manage global federation", 0},
     {"status",    cmd_status,    "Show Till status", 0},
     {"run",       cmd_run,       "Run component command", 1},  /* Special case: needs argc-2, argv+2 */
     {"update",    cmd_update,    "Update Till from git", 0},
