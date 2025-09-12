@@ -166,6 +166,19 @@ install: $(TARGET) man
 			echo '  export PATH="$$HOME/.local/bin:$$PATH"'; \
 		fi; \
 	fi
+	@# Create .till directory and initial hosts file
+	@echo "Initializing Till configuration..."
+	@mkdir -p .till
+	@if [ ! -f .till/hosts-local.json ]; then \
+		echo "Creating initial hosts-local.json..."; \
+		HOSTNAME=$$(hostname); \
+		TILL_PATH=$$(pwd); \
+		echo "{\"hosts\":{\"local\":{\"user\":\"$$USER\",\"host\":\"localhost\",\"port\":22,\"status\":\"ready\",\"hostname\":\"$$HOSTNAME\",\"till_configured\":\"yes\",\"till_path\":\"$$TILL_PATH\"}},\"updated\":\"$$(date +%s)\"}" | python3 -m json.tool > .till/hosts-local.json 2>/dev/null || \
+		echo '{"hosts":{"local":{"user":"'$$USER'","host":"localhost","port":22,"status":"ready","hostname":"'$$HOSTNAME'","till_configured":"yes","till_path":"'$$TILL_PATH'"}},"updated":"'$$(date +%s)'"}' > .till/hosts-local.json; \
+		echo "Initial hosts file created"; \
+	else \
+		echo "Using existing hosts-local.json"; \
+	fi
 	@echo "You can now run 'till' from anywhere"
 
 # Uninstall - removes from both locations

@@ -672,30 +672,67 @@ int till_host_sync(void) {
             printf("    ✗ Failed to get hostname\n");
         }
         
-        /* Step 3: Check if till is configured */
+        /* Step 3: Find till installation and check if configured */
         printf("  Checking till configuration...\n");
-        if (run_ssh_command(user, hostname, port, 
-                           "test -f ~/projects/github/till/till && echo yes || echo no",
-                           output, sizeof(output)) == 0) {
+        char find_till_cmd[512];
+        snprintf(find_till_cmd, sizeof(find_till_cmd),
+                "if [ -f /usr/local/till/till ]; then echo 'yes:/usr/local/till'; "
+                "elif [ -f /opt/till/till ]; then echo 'yes:/opt/till'; "
+                "elif [ -f ~/projects/github/till/till ]; then echo \"yes:$(cd ~/projects/github/till && pwd)\"; "
+                "elif which till >/dev/null 2>&1; then echo \"yes:$(which till | xargs dirname)\"; "
+                "else echo 'no:'; fi");
+        
+        if (run_ssh_command(user, hostname, port, find_till_cmd, output, sizeof(output)) == 0) {
             /* Remove newline */
             char *nl = strchr(output, '\n');
             if (nl) *nl = '\0';
             
-            printf("    ✓ Till configured: %s\n", output);
-            
-            /* Update host entry */
-            cJSON *merged_host = cJSON_GetObjectItem(merged_hosts, host_name);
-            if (merged_host) {
-                json_set_string(merged_host, "till_configured", output);
+            /* Parse response - format is "configured:path" */
+            char *colon = strchr(output, ':');
+            if (colon) {
+                *colon = '\0';
+                char *till_configured = output;
+                char *till_path = colon + 1;
+                
+                printf("    ✓ Till configured: %s\n", till_configured);
+                if (strlen(till_path) > 0) {
+                    printf("    Till path: %s\n", till_path);
+                }
+                
+                /* Update host entry */
+                cJSON *merged_host = cJSON_GetObjectItem(merged_hosts, host_name);
+                if (merged_host) {
+                    json_set_string(merged_host, "till_configured", till_configured);
+                    if (strlen(till_path) > 0) {
+                        json_set_string(merged_host, "till_path", till_path);
+                    }
+                }
             }
         }
         
         /* Step 4: Pull remote hosts file */
         printf("  Fetching remote hosts file...\n");
+        
+        /* First find where till is installed on remote */
+        char find_till_cmd2[512];
+        char remote_till_dir[1024] = "";
+        snprintf(find_till_cmd2, sizeof(find_till_cmd2),
+                "if [ -d /usr/local/till/.till ]; then echo /usr/local/till/.till; "
+                "elif [ -d /opt/till/.till ]; then echo /opt/till/.till; "
+                "elif [ -d ~/projects/github/till/.till ]; then echo ~/projects/github/till/.till; "
+                "elif [ -d ./.till ]; then pwd | sed 's|$|/.till|'; "
+                "else which till 2>/dev/null | xargs dirname 2>/dev/null | sed 's|$|/.till|'; fi");
+        
+        run_ssh_command(user, hostname, port, find_till_cmd2, remote_till_dir, sizeof(remote_till_dir));
+        char *newline = strchr(remote_till_dir, '\n');
+        if (newline) *newline = '\0';
+        
         char remote_hosts[8192] = "";
-        if (run_ssh_command(user, hostname, port,
-                           "cat ~/.till/hosts-local.json 2>/dev/null",
-                           remote_hosts, sizeof(remote_hosts)) == 0 && strlen(remote_hosts) > 0) {
+        if (strlen(remote_till_dir) > 0) {
+            char cat_cmd[1024];
+            snprintf(cat_cmd, sizeof(cat_cmd), "cat %s/hosts-local.json 2>/dev/null", remote_till_dir);
+            if (run_ssh_command(user, hostname, port, cat_cmd,
+                               remote_hosts, sizeof(remote_hosts)) == 0 && strlen(remote_hosts) > 0) {
             
             cJSON *remote_json = cJSON_Parse(remote_hosts);
             if (remote_json) {
@@ -720,7 +757,10 @@ int till_host_sync(void) {
                 printf("    ⚠ Invalid remote hosts file\n");
             }
         } else {
-            printf("    ⚠ No remote hosts file found\n");
+            printf("    ⚠ No remote hosts file found in %s\n", remote_till_dir);
+        }
+        } else {
+            printf("    ⚠ Could not determine till directory on remote\n");
         }
         
         hosts_processed++;
@@ -770,21 +810,52 @@ int till_host_sync(void) {
         if (strcmp(till_configured, "yes") == 0) {
             printf("  Updating '%s'...\n", host_name);
             
-            /* First create the .till directory */
-            char mkdir_cmd[256];
-            snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p ~/.till");
-            run_ssh_command(user, hostname, port, mkdir_cmd, NULL, 0);
+            /* Check if we have stored till_path */
+            const char *stored_till_path = json_get_string(merged_host, "till_path", NULL);
+            char till_dir[1024] = "";
             
-            /* Use cat with heredoc to write the file safely */
-            char cmd[20480];
-            snprintf(cmd, sizeof(cmd),
-                    "cat > ~/.till/hosts-local.json << 'EOF'\n%s\nEOF",
-                    hosts_json_str);
-            
-            if (run_ssh_command(user, hostname, port, cmd, NULL, 0) == 0) {
-                printf("    ✓ Updated\n");
+            if (stored_till_path && strlen(stored_till_path) > 0) {
+                /* Use stored path */
+                snprintf(till_dir, sizeof(till_dir), "%s/.till", stored_till_path);
+                printf("    Using stored till path: %s\n", till_dir);
             } else {
-                printf("    ✗ Failed\n");
+                /* Find where till is installed on remote */
+                char find_till_cmd[512];
+                snprintf(find_till_cmd, sizeof(find_till_cmd),
+                        "if [ -d /usr/local/till/.till ]; then echo /usr/local/till/.till; "
+                        "elif [ -d /opt/till/.till ]; then echo /opt/till/.till; "
+                        "elif [ -d ~/projects/github/till/.till ]; then echo ~/projects/github/till/.till; "
+                        "elif [ -d ./.till ]; then pwd | sed 's|$|/.till|'; "
+                        "else which till 2>/dev/null | xargs dirname 2>/dev/null | sed 's|$|/.till|'; fi");
+                
+                if (run_ssh_command(user, hostname, port, find_till_cmd, till_dir, sizeof(till_dir)) == 0) {
+                    /* Remove newline */
+                    char *newline = strchr(till_dir, '\n');
+                    if (newline) *newline = '\0';
+                    printf("    Found till directory: %s\n", till_dir);
+                }
+            }
+            
+            if (strlen(till_dir) > 0) {
+                /* Create .till directory if needed */
+                char mkdir_cmd[1024];
+                snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p %s", till_dir);
+                run_ssh_command(user, hostname, port, mkdir_cmd, NULL, 0);
+                
+                /* Use cat with heredoc to write the file safely */
+                char cmd[20480];
+                snprintf(cmd, sizeof(cmd),
+                        "cat > %s/hosts-local.json << 'EOF'\n%s\nEOF",
+                        till_dir, hosts_json_str);
+                
+                if (run_ssh_command(user, hostname, port, cmd, NULL, 0) == 0) {
+                    printf("    ✓ Updated\n");
+                } else {
+                    printf("    ✗ Failed to write hosts file\n");
+                    hosts_failed++;
+                }
+            } else {
+                printf("    ✗ Could not find till directory on remote\n");
                 hosts_failed++;
             }
         } else {
