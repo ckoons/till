@@ -61,6 +61,7 @@ static const command_def_t commands[] = {
     {"status",    cmd_status,    "Show Till status", 0},
     {"run",       cmd_run,       "Run component command", 1},  /* Special case: needs argc-2, argv+2 */
     {"update",    cmd_update,    "Update Till from git", 0},
+    {"repair",    cmd_repair,    "Check and repair Till configuration", 0},
     {"help",      cmd_help,      "Show help information", 0},
     {NULL, NULL, NULL, 0}
 };
@@ -181,7 +182,7 @@ static void print_usage(const char *program) {
     printf("  host setup <name>   Install Till on remote host\n");
     printf("  host exec <name> <cmd>  Execute command on remote host\n");
     printf("  host ssh <name> [cmd]   Open SSH session to remote host\n");
-    printf("  host sync [name]    Sync from remote host(s)\n");
+    printf("  host sync           Sync hosts configuration across all machines\n");
     printf("  host status [name]  Show host status\n");
     printf("  host remove <name>  Remove host from configuration\n");
     printf("\nExamples:\n");

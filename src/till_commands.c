@@ -594,6 +594,185 @@ int cmd_update(int argc, char *argv[]) {
     return 0;
 }
 
+/* Command: repair - Repair Till configuration and installations */
+int cmd_repair(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    
+    printf("Till Repair\n");
+    printf("===========\n");
+    printf("Checking and repairing Till configuration...\n\n");
+    
+    int repairs_made = 0;
+    int errors_found = 0;
+    
+    /* 1. Check and repair .till directories */
+    printf("Checking .till directories...\n");
+    const char *dirs[] = {
+        TILL_HOME,
+        TILL_CONFIG_DIR, 
+        TILL_TEKTON_DIR,
+        TILL_LOGS_DIR,
+        NULL
+    };
+    
+    for (int i = 0; dirs[i] != NULL; i++) {
+        char path[TILL_MAX_PATH];
+        char *home = getenv("HOME");
+        if (!home) continue;
+        
+        snprintf(path, sizeof(path), "%s/%s", home, dirs[i]);
+        
+        struct stat st;
+        if (stat(path, &st) != 0) {
+            printf("  ✗ Missing: %s\n", path);
+            if (mkdir(path, TILL_DIR_PERMS) == 0) {
+                printf("    ✓ Created\n");
+                repairs_made++;
+            } else {
+                printf("    ✗ Failed to create\n");
+                errors_found++;
+            }
+        } else if (!S_ISDIR(st.st_mode)) {
+            printf("  ✗ Not a directory: %s\n", path);
+            errors_found++;
+        } else if ((st.st_mode & 0777) != TILL_DIR_PERMS) {
+            printf("  ⚠ Wrong permissions: %s\n", path);
+            if (chmod(path, TILL_DIR_PERMS) == 0) {
+                printf("    ✓ Fixed permissions\n");
+                repairs_made++;
+            } else {
+                printf("    ✗ Failed to fix permissions\n");
+                errors_found++;
+            }
+        } else {
+            printf("  ✓ OK: %s\n", path);
+        }
+    }
+    
+    /* 2. Check and repair .till symlinks in Tekton directories */
+    printf("\nChecking Tekton .till symlinks...\n");
+    cJSON *registry = load_till_json("tekton/till-private.json");
+    if (registry) {
+        cJSON *installations = cJSON_GetObjectItem(registry, "installations");
+        if (installations) {
+            cJSON *inst;
+            cJSON_ArrayForEach(inst, installations) {
+                const char *name = inst->string;
+                const char *root = json_get_string(inst, "root", NULL);
+                
+                if (root) {
+                    char symlink_path[TILL_MAX_PATH];
+                    snprintf(symlink_path, sizeof(symlink_path), "%s/.till", root);
+                    
+                    struct stat st;
+                    if (lstat(symlink_path, &st) != 0) {
+                        printf("  ✗ Missing symlink: %s/.till\n", root);
+                        
+                        /* Create symlink */
+                        char till_dir[TILL_MAX_PATH];
+                        get_till_dir(till_dir, sizeof(till_dir));
+                        
+                        if (symlink(till_dir, symlink_path) == 0) {
+                            printf("    ✓ Created symlink\n");
+                            repairs_made++;
+                        } else {
+                            printf("    ✗ Failed to create symlink\n");
+                            errors_found++;
+                        }
+                    } else if (!S_ISLNK(st.st_mode)) {
+                        printf("  ✗ Not a symlink: %s/.till\n", root);
+                        errors_found++;
+                    } else {
+                        printf("  ✓ OK: %s (%s)\n", name, root);
+                    }
+                }
+            }
+        }
+        cJSON_Delete(registry);
+    }
+    
+    /* 3. Check and repair JSON files */
+    printf("\nChecking JSON files...\n");
+    const char *json_files[] = {
+        "tekton/till-private.json",
+        "hosts-local.json",
+        NULL
+    };
+    
+    for (int i = 0; json_files[i] != NULL; i++) {
+        cJSON *json = load_till_json(json_files[i]);
+        if (!json) {
+            printf("  ✗ Invalid or missing: %s\n", json_files[i]);
+            
+            /* Try to restore from backup */
+            char backup_path[TILL_MAX_PATH];
+            snprintf(backup_path, sizeof(backup_path), "%s.bak", json_files[i]);
+            
+            cJSON *backup = load_till_json(backup_path);
+            if (backup) {
+                if (save_till_json(json_files[i], backup) == 0) {
+                    printf("    ✓ Restored from backup\n");
+                    repairs_made++;
+                } else {
+                    printf("    ✗ Failed to restore\n");
+                    errors_found++;
+                }
+                cJSON_Delete(backup);
+            } else {
+                /* Create minimal valid file */
+                cJSON *new_json = cJSON_CreateObject();
+                if (strcmp(json_files[i], "hosts-local.json") == 0) {
+                    cJSON_AddObjectToObject(new_json, "hosts");
+                    json_set_string(new_json, "updated", "0");
+                } else {
+                    cJSON_AddObjectToObject(new_json, "installations");
+                    cJSON_AddObjectToObject(new_json, "holds");
+                }
+                
+                if (save_till_json(json_files[i], new_json) == 0) {
+                    printf("    ✓ Created new file\n");
+                    repairs_made++;
+                } else {
+                    printf("    ✗ Failed to create\n");
+                    errors_found++;
+                }
+                cJSON_Delete(new_json);
+            }
+        } else {
+            printf("  ✓ OK: %s\n", json_files[i]);
+            cJSON_Delete(json);
+        }
+    }
+    
+    /* 4. Clean up expired holds */
+    printf("\nCleaning up expired holds...\n");
+    int released = cleanup_expired_holds();
+    if (released > 0) {
+        printf("  ✓ Released %d expired hold%s\n", released, released == 1 ? "" : "s");
+        repairs_made += released;
+    } else {
+        printf("  ✓ No expired holds\n");
+    }
+    
+    /* Summary */
+    printf("\n");
+    printf("=============================\n");
+    printf("Repair Summary\n");
+    printf("=============================\n");
+    if (repairs_made > 0) {
+        printf("✓ Repairs made: %d\n", repairs_made);
+    }
+    if (errors_found > 0) {
+        printf("✗ Errors remaining: %d\n", errors_found);
+    }
+    if (repairs_made == 0 && errors_found == 0) {
+        printf("✓ Everything is OK\n");
+    }
+    
+    return errors_found > 0 ? 1 : 0;
+}
+
 /* Command: help - Show help information */
 int cmd_help(int argc, char *argv[]) {
     if (argc > 1) {

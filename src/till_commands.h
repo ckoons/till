@@ -17,6 +17,7 @@ int cmd_restart(int argc, char **argv);
 int cmd_status(int argc, char **argv);
 int cmd_run(int argc, char **argv);
 int cmd_update(int argc, char **argv);
+int cmd_repair(int argc, char **argv);
 int cmd_list(int argc, char **argv);
 int cmd_info(int argc, char **argv);
 int cmd_logs(int argc, char **argv);

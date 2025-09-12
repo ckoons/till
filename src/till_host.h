@@ -26,6 +26,9 @@ int till_host_remove(const char *name, int clean_remote);
 /* Show host status */
 int till_host_status(const char *name);
 
+/* Sync hosts across all machines */
+int till_host_sync(void);
+
 /* Main host command handler */
 int till_host_command(int argc, char *argv[]);
 

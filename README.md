@@ -59,6 +59,11 @@
   Core Commands
 
   till status                    # What's growing?
+  till install tekton            # Install new Tekton instance
+  till sync                      # Update till and all Tektons
+  till repair                    # Check and fix configuration issues
+  till host add <name> <user>@<host>  # Add remote host
+  till host sync                 # Sync hosts across all machines
   till deploy [target]           # Plant seeds
   till hold [target]             # Let field lie fallow
   till release [target]          # Remove holds

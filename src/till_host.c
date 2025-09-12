@@ -573,6 +573,7 @@ static void print_host_help(void) {
     printf("  ssh <name> [args]                SSH to remote host\n");
     printf("  remove <name> [--clean-remote]   Remove a host\n");
     printf("  status [name]                    Show host(s) status\n");
+    printf("  sync                             Sync hosts across all machines\n");
     printf("  list                             List all hosts\n");
     printf("\nExamples:\n");
     printf("  till host add m2 user@192.168.1.100\n");
@@ -580,6 +581,230 @@ static void print_host_help(void) {
     printf("  till host setup m2\n");
     printf("  till host exec m2 'till status'\n");
     printf("  till host ssh m2\n");
+}
+
+/* Sync hosts across all machines */
+int till_host_sync(void) {
+    printf("Syncing hosts across all machines...\n");
+    till_log(LOG_INFO, "Starting host sync");
+    
+    /* Load local hosts file */
+    cJSON *local_json = load_till_json("hosts-local.json");
+    if (!local_json) {
+        till_error("No hosts configured\n");
+        return -1;
+    }
+    
+    cJSON *local_hosts = cJSON_GetObjectItem(local_json, "hosts");
+    if (!local_hosts) {
+        till_error("Invalid hosts file\n");
+        cJSON_Delete(local_json);
+        return -1;
+    }
+    
+    /* Create merged hosts object */
+    cJSON *merged_hosts = cJSON_CreateObject();
+    
+    /* First, copy all local hosts to merged */
+    cJSON *host;
+    cJSON_ArrayForEach(host, local_hosts) {
+        const char *host_name = host->string;
+        cJSON *host_copy = cJSON_Duplicate(host, 1);
+        
+        /* Get hostname for local machine */
+        if (strcmp(host_name, "local") == 0) {
+            char hostname[256];
+            if (gethostname(hostname, sizeof(hostname)) == 0) {
+                json_set_string(host_copy, "hostname", hostname);
+            }
+            json_set_string(host_copy, "till_configured", "yes");
+        }
+        
+        cJSON_AddItemToObject(merged_hosts, host_name, host_copy);
+    }
+    
+    /* Process each remote host */
+    int hosts_processed = 0;
+    int hosts_failed = 0;
+    
+    cJSON_ArrayForEach(host, local_hosts) {
+        const char *host_name = host->string;
+        
+        /* Skip local host */
+        if (strcmp(host_name, "local") == 0) {
+            continue;
+        }
+        
+        printf("\nProcessing host '%s'...\n", host_name);
+        
+        const char *user = cJSON_GetStringValue(cJSON_GetObjectItem(host, "user"));
+        const char *hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "host"));
+        int port = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "port"));
+        if (!port) port = 22;
+        
+        /* Step 1: Run till update on remote */
+        printf("  Running till update...\n");
+        char output[1024];
+        if (run_ssh_command(user, hostname, port, 
+                           "cd ~/projects/github/till && git pull && make",
+                           output, sizeof(output)) == 0) {
+            printf("    ✓ Till updated\n");
+        } else {
+            printf("    ⚠ Update failed (till might not be installed)\n");
+        }
+        
+        /* Step 2: Get hostname from remote */
+        printf("  Getting hostname...\n");
+        if (run_ssh_command(user, hostname, port, "hostname", 
+                           output, sizeof(output)) == 0) {
+            /* Remove newline */
+            char *nl = strchr(output, '\n');
+            if (nl) *nl = '\0';
+            
+            printf("    ✓ Hostname: %s\n", output);
+            
+            /* Update host entry with hostname */
+            cJSON *merged_host = cJSON_GetObjectItem(merged_hosts, host_name);
+            if (merged_host) {
+                json_set_string(merged_host, "hostname", output);
+            }
+        } else {
+            printf("    ✗ Failed to get hostname\n");
+        }
+        
+        /* Step 3: Check if till is configured */
+        printf("  Checking till configuration...\n");
+        if (run_ssh_command(user, hostname, port, 
+                           "test -f ~/projects/github/till/till && echo yes || echo no",
+                           output, sizeof(output)) == 0) {
+            /* Remove newline */
+            char *nl = strchr(output, '\n');
+            if (nl) *nl = '\0';
+            
+            printf("    ✓ Till configured: %s\n", output);
+            
+            /* Update host entry */
+            cJSON *merged_host = cJSON_GetObjectItem(merged_hosts, host_name);
+            if (merged_host) {
+                json_set_string(merged_host, "till_configured", output);
+            }
+        }
+        
+        /* Step 4: Pull remote hosts file */
+        printf("  Fetching remote hosts file...\n");
+        char remote_hosts[8192] = "";
+        if (run_ssh_command(user, hostname, port,
+                           "cat ~/.till/hosts-local.json 2>/dev/null",
+                           remote_hosts, sizeof(remote_hosts)) == 0 && strlen(remote_hosts) > 0) {
+            
+            cJSON *remote_json = cJSON_Parse(remote_hosts);
+            if (remote_json) {
+                cJSON *remote_host_list = cJSON_GetObjectItem(remote_json, "hosts");
+                if (remote_host_list) {
+                    /* Merge remote hosts */
+                    cJSON *remote_host;
+                    cJSON_ArrayForEach(remote_host, remote_host_list) {
+                        const char *remote_host_name = remote_host->string;
+                        
+                        /* Don't overwrite existing entries, but add new ones */
+                        if (!cJSON_GetObjectItem(merged_hosts, remote_host_name)) {
+                            cJSON *host_copy = cJSON_Duplicate(remote_host, 1);
+                            cJSON_AddItemToObject(merged_hosts, remote_host_name, host_copy);
+                            printf("    + Added host '%s' from remote\n", remote_host_name);
+                        }
+                    }
+                }
+                cJSON_Delete(remote_json);
+                printf("    ✓ Merged remote hosts\n");
+            } else {
+                printf("    ⚠ Invalid remote hosts file\n");
+            }
+        } else {
+            printf("    ⚠ No remote hosts file found\n");
+        }
+        
+        hosts_processed++;
+    }
+    
+    /* Create new hosts file without local_hostname */
+    cJSON *new_json = cJSON_CreateObject();
+    cJSON_AddItemToObject(new_json, "hosts", merged_hosts);
+    
+    /* Update timestamp */
+    char ts[32];
+    snprintf(ts, sizeof(ts), "%ld", time(NULL));
+    json_set_string(new_json, "updated", ts);
+    
+    /* Save merged hosts locally */
+    printf("\nSaving merged hosts file...\n");
+    if (save_till_json("hosts-local.json", new_json) == 0) {
+        printf("✓ Local hosts file updated\n");
+    } else {
+        till_error("Failed to save merged hosts file\n");
+        cJSON_Delete(local_json);
+        cJSON_Delete(new_json);
+        return -1;
+    }
+    
+    /* Push merged hosts to all remotes */
+    printf("\nPushing hosts file to all remotes...\n");
+    char *hosts_json_str = cJSON_PrintUnformatted(new_json);
+    
+    cJSON_ArrayForEach(host, local_hosts) {
+        const char *host_name = host->string;
+        
+        /* Skip local host */
+        if (strcmp(host_name, "local") == 0) {
+            continue;
+        }
+        
+        const char *user = cJSON_GetStringValue(cJSON_GetObjectItem(host, "user"));
+        const char *hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "host"));
+        int port = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "port"));
+        if (!port) port = 22;
+        
+        /* Check if till is configured */
+        cJSON *merged_host = cJSON_GetObjectItem(merged_hosts, host_name);
+        const char *till_configured = json_get_string(merged_host, "till_configured", "no");
+        
+        if (strcmp(till_configured, "yes") == 0) {
+            printf("  Updating '%s'...\n", host_name);
+            
+            /* Create command to write hosts file */
+            char cmd[10240];
+            snprintf(cmd, sizeof(cmd),
+                    "mkdir -p ~/.till && echo '%s' > ~/.till/hosts-local.json",
+                    hosts_json_str);
+            
+            if (run_ssh_command(user, hostname, port, cmd, NULL, 0) == 0) {
+                printf("    ✓ Updated\n");
+            } else {
+                printf("    ✗ Failed\n");
+                hosts_failed++;
+            }
+        } else {
+            printf("  Skipping '%s' (till not configured)\n", host_name);
+        }
+    }
+    
+    free(hosts_json_str);
+    cJSON_Delete(local_json);
+    cJSON_Delete(new_json);
+    
+    /* Summary */
+    printf("\n");
+    printf("=============================\n");
+    printf("Host Sync Complete\n");
+    printf("=============================\n");
+    printf("Hosts processed: %d\n", hosts_processed);
+    if (hosts_failed > 0) {
+        printf("Failed updates: %d\n", hosts_failed);
+    }
+    
+    till_log(LOG_INFO, "Host sync complete: %d processed, %d failed", 
+             hosts_processed, hosts_failed);
+    
+    return hosts_failed > 0 ? 1 : 0;
 }
 
 /* Main host command handler */
@@ -648,6 +873,9 @@ int till_host_command(int argc, char *argv[]) {
     }
     else if (strcmp(subcmd, "status") == 0 || strcmp(subcmd, "list") == 0) {
         return till_host_status(argc > 2 ? argv[2] : NULL);
+    }
+    else if (strcmp(subcmd, "sync") == 0) {
+        return till_host_sync();
     }
     else {
         till_error("Unknown host subcommand: %s\n\n", subcmd);
