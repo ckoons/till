@@ -200,7 +200,7 @@ int cmd_install(int argc, char *argv[]) {
     install_options_t opts = {0};
     
     /* Set defaults */
-    strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1);
+    strncpy(opts.mode, MODE_ANONYMOUS, sizeof(opts.mode) - 1);
     opts.mode[sizeof(opts.mode) - 1] = '\0';
     opts.port_base = DEFAULT_PORT_BASE;
     opts.ai_port_base = DEFAULT_AI_PORT_BASE;
@@ -239,7 +239,7 @@ int cmd_install(int argc, char *argv[]) {
             printf("Till Install - Install Tekton\n\n");
             printf("Usage: till install [options]\n\n");
             printf("Options:\n");
-            printf("  --mode MODE      Installation mode: solo, observer, member, coder-[a-c]\n");
+            printf("  --mode MODE      Installation mode: anonymous, named, trusted, coder-[a-c]\n");
             printf("  --name NAME      Federation name (FQN format)\n");
             printf("  --path PATH      Installation directory\n");
             printf("  --port-base PORT Starting port for components\n");
@@ -247,7 +247,7 @@ int cmd_install(int argc, char *argv[]) {
             printf("  -i, --interactive Interactive mode\n\n");
             printf("Examples:\n");
             printf("  till install                        # Interactive installation\n");
-            printf("  till install --mode solo            # Solo mode\n");
+            printf("  till install --mode anonymous       # Anonymous mode\n");
             printf("  till install --mode coder-a         # Development environment\n");
             return 0;
         }
@@ -283,7 +283,7 @@ int cmd_install(int argc, char *argv[]) {
         int default_ai_port = lowest_ai_port < 50000 ? lowest_ai_port - 100 : DEFAULT_AI_PORT_BASE;
         
         /* 1. Prompt for Name */
-        char default_name[256] = "tekton-solo";
+        char default_name[256] = "tekton-anon";
         printf("Name [%s]: ", default_name);
         char name_input[256];
         if (fgets(name_input, sizeof(name_input), stdin)) {
@@ -369,22 +369,22 @@ int cmd_install(int argc, char *argv[]) {
         }
         
         /* 3. Prompt for Federation Mode */
-        printf("Federation Mode (solo/observer/member) [solo]: ");
+        printf("Federation Mode (anonymous/named/trusted) [anonymous]: ");
         char mode_input[32];
         if (fgets(mode_input, sizeof(mode_input), stdin)) {
             mode_input[strcspn(mode_input, "\n")] = 0;  /* Remove newline */
-            if (strcmp(mode_input, "observer") == 0) {
-                strncpy(opts.mode, MODE_OBSERVER, sizeof(opts.mode) - 1);
-            } else if (strcmp(mode_input, "member") == 0) {
-                strncpy(opts.mode, MODE_MEMBER, sizeof(opts.mode) - 1);
-            } else if (strlen(mode_input) == 0 || strcmp(mode_input, "solo") == 0) {
-                strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1);
+            if (strcmp(mode_input, "named") == 0) {
+                strncpy(opts.mode, MODE_NAMED, sizeof(opts.mode) - 1);
+            } else if (strcmp(mode_input, "trusted") == 0) {
+                strncpy(opts.mode, MODE_TRUSTED, sizeof(opts.mode) - 1);
+            } else if (strlen(mode_input) == 0 || strcmp(mode_input, "anonymous") == 0) {
+                strncpy(opts.mode, MODE_ANONYMOUS, sizeof(opts.mode) - 1);
             } else {
                 /* Allow coder-a, coder-b, coder-c as well */
                 strncpy(opts.mode, mode_input, sizeof(opts.mode) - 1);
             }
         } else {
-            strncpy(opts.mode, MODE_SOLO, sizeof(opts.mode) - 1);
+            strncpy(opts.mode, MODE_ANONYMOUS, sizeof(opts.mode) - 1);
         }
         
         /* 4. Prompt for Component Starting Port */
@@ -433,9 +433,9 @@ int cmd_install(int argc, char *argv[]) {
     }
     
     /* Validate mode */
-    if (strcmp(opts.mode, MODE_SOLO) != 0 && 
-        strcmp(opts.mode, MODE_OBSERVER) != 0 &&
-        strcmp(opts.mode, MODE_MEMBER) != 0 &&
+    if (strcmp(opts.mode, MODE_ANONYMOUS) != 0 && 
+        strcmp(opts.mode, MODE_NAMED) != 0 &&
+        strcmp(opts.mode, MODE_TRUSTED) != 0 &&
         strncmp(opts.mode, "coder-", 6) != 0) {
         till_error("Invalid mode: %s", opts.mode);
         return EXIT_USAGE_ERROR;
@@ -443,13 +443,13 @@ int cmd_install(int argc, char *argv[]) {
     
     /* Generate name if not provided */
     if (strlen(opts.name) == 0) {
-        if (strcmp(opts.mode, MODE_MEMBER) == 0 || strcmp(opts.mode, MODE_OBSERVER) == 0) {
+        if (strcmp(opts.mode, MODE_TRUSTED) == 0 || strcmp(opts.mode, MODE_NAMED) == 0) {
             if (!g_interactive) {
                 till_error("--name required for %s mode", opts.mode);
                 return EXIT_USAGE_ERROR;
             }
         } else {
-            strncpy(opts.name, "tekton-solo", sizeof(opts.name) - 1);
+            strncpy(opts.name, "tekton-anon", sizeof(opts.name) - 1);
             opts.name[sizeof(opts.name) - 1] = '\0';
         }
     }

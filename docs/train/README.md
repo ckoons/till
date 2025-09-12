@@ -47,13 +47,13 @@ till
 
 #### Solo Installation (Private)
 ```bash
-till install tekton --mode solo
+till install tekton --mode anonymous
 # Installs in ./Tekton with default ports
 ```
 
 #### Named Installation (Can Join Federation)
 ```bash
-till install tekton --name alice.development.us --mode member
+till install tekton --name alice.development.us --mode trusted
 # Installs with federation capability
 ```
 
@@ -126,7 +126,7 @@ till update apply
 
 Join the federation:
 ```bash
-till federate init --mode observer --name alice.development.us
+till federate init --mode named --name alice.development.us
 ```
 
 Check federation status:
@@ -217,7 +217,7 @@ Error: No primary Tekton found. Install primary first.
 
 ### Installation
 - `till install tekton [options]` - Install new Tekton
-  - `--mode [solo|observer|member|coder-x]`
+  - `--mode [anonymous|named|trusted|coder-x]`
   - `--name <name>` - Federation name
   - `--path <path>` - Installation directory
   - `--port-base <port>` - Starting port number
@@ -267,7 +267,7 @@ Error: No primary Tekton found. Install primary first.
 3. Set up host management with `till host init`
 4. Add remote hosts for distributed development
 5. Configure automatic daily sync
-6. Explore federation by joining as an observer
+6. Explore federation by joining as a named participant
 7. Add Coder environments for development
 8. Deploy to production hosts
 

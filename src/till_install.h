@@ -19,7 +19,7 @@ typedef struct {
 typedef struct {
     char name[TILL_MAX_NAME];          /* Registry name */
     char path[TILL_MAX_PATH];          /* Installation path */
-    char mode[32];                      /* solo/observer/member */
+    char mode[32];                      /* anonymous/named/trusted */
     int port_base;                      /* Base port (8000, 8100, etc) */
     int ai_port_base;                   /* AI base port (45000, 45100, etc) */
     char registry_name[TILL_MAX_NAME]; /* TEKTON_REGISTRY_NAME */

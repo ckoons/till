@@ -100,7 +100,7 @@ till --version
 For a private, non-federated Tekton:
 
 ```bash
-till install tekton --mode solo
+till install tekton --mode anonymous
 ```
 
 This will:
@@ -115,7 +115,7 @@ For a Tekton that can join the federation:
 ```bash
 till install tekton \
   --name alice.development.us \
-  --mode member
+  --mode trusted
 ```
 
 Replace `alice.development.us` with your chosen name following the pattern:
@@ -128,7 +128,7 @@ For specific requirements:
 ```bash
 till install tekton \
   --name alice.development.us \
-  --mode observer \
+  --mode named \
   --path /opt/tekton \
   --port-base 9000 \
   --ai-port-base 46000
@@ -200,7 +200,7 @@ cd till
 make
 
 # 2. Install primary Tekton
-./till install tekton --name alice.development.us --mode member
+./till install tekton --name alice.development.us --mode trusted
 
 # 3. Install Coder-A for development
 ./till install tekton --mode coder-a
@@ -224,13 +224,13 @@ make
 ### Join Federation as Observer
 
 ```bash
-till federate init --mode observer --name alice.development.us
+till federate init --mode named --name alice.development.us
 ```
 
 ### Join Federation as Member
 
 ```bash
-till federate init --mode member --name alice.development.us
+till federate init --mode trusted --name alice.development.us
 ```
 
 This will:
@@ -300,7 +300,7 @@ Error: No primary Tekton found. Install primary first.
 
 **Solution:** Install a primary Tekton before Coder environments:
 ```bash
-till install tekton --name alice.development.us --mode solo
+till install tekton --name alice.development.us --mode anonymous
 ```
 
 ## Uninstalling
@@ -367,7 +367,7 @@ Stored in `.till/tekton/federation/till-private.json`:
     "alice.development.us": {
       "path": "/Users/alice/projects/Tekton",
       "port_base": 8000,
-      "mode": "member"
+      "mode": "trusted"
     }
   }
 }

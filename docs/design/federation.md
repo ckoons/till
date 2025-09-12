@@ -56,7 +56,7 @@ The application layer enables Tekton applications to federate and collaborate:
 **Management**:
 ```bash
 # Join GitHub federation
-till federate init --mode member --name alice.dev.us
+till federate init --mode trusted --name alice.dev.us
 ```
 
 ### Layer Interaction
@@ -77,7 +77,7 @@ till host setup prod
 till host deploy prod primary.tekton.us
 
 # Application: Join federation
-ssh till-prod 'cd ~/Tekton && till federate init --mode member --name prod.company.us'
+ssh till-prod 'cd ~/Tekton && till federate init --mode trusted --name prod.company.us'
 ```
 
 ## Federation Modes (Application Layer)
@@ -129,7 +129,7 @@ Examples:
 
 Example branch name:
 ```
-registration-kant-philosophy-us-observer
+registration-kant-philosophy-us-named
 ```
 
 ### Deregistration
@@ -148,12 +148,12 @@ Each Tekton maintains its own relationship definitions:
 {
   "relationships": {
     "hume.philosophy.uk": {
-      "role": "member",
+      "role": "trusted",
       "trust_level": "high",
       "accept_updates": true
     },
     "marx.economics.de": {
-      "role": "observer",
+      "role": "named",
       "trust_level": "low",
       "accept_updates": false
     }
@@ -162,7 +162,7 @@ Each Tekton maintains its own relationship definitions:
 ```
 
 ### Asymmetric Relationships
-- A can trust B as "member" while B only observes A
+- A can trust B as "trusted" while B only observes A
 - No requirement for reciprocal trust
 - Natural formation of trust clusters
 
@@ -183,7 +183,7 @@ Each Tekton maintains its own relationship definitions:
 ### Private Data (Local)
 ```json
 {
-  "mode": "member",
+  "mode": "trusted",
   "private_key_path": ".till/credentials/private.key",
   "relationships": { ... }
 }
@@ -206,7 +206,7 @@ Each Tekton maintains its own relationship definitions:
 
 ### Initialization
 ```bash
-till federate init --mode observer --name kant.philosophy.us
+till federate init --mode named --name kant.philosophy.us
 ```
 
 ### Status

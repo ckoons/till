@@ -109,22 +109,22 @@ till install tekton [options]
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--mode MODE` | Installation mode: solo, observer, member, coder-[a-c] | solo |
+| `--mode MODE` | Installation mode: anonymous, named, trusted, coder-[a-c] | anonymous |
 | `--name NAME` | Federation name (FQN format) | auto-generated |
 | `--path PATH` | Installation directory | ./Tekton or ./Coder-X |
 | `--port-base PORT` | Starting port for components | auto-allocated |
 | `--ai-port-base PORT` | Starting port for AI components | auto-allocated |
 
 Installation Modes:
-- **solo**: Private installation, not federated
-- **observer**: Read-only federation participant
-- **member**: Full federation participant
+- **anonymous**: Private installation with read-only federation access
+- **named**: Standard federation participant with identity
+- **trusted**: Full federation participant with telemetry
 - **coder-a/b/c**: Development environment
 
 Examples:
 ```bash
-till install tekton --mode solo
-till install tekton --name alice.dev.us --mode member
+till install tekton --mode anonymous
+till install tekton --name alice.dev.us --mode trusted
 till install tekton --mode coder-a
 till install tekton --path ~/myproject/Tekton --port-base 9000
 ```
@@ -345,13 +345,13 @@ till federate init --mode <mode> --name <name>
 
 | Option | Description | Required |
 |--------|-------------|----------|
-| `--mode` | Federation mode: observer, member | Yes |
+| `--mode` | Federation mode: named, trusted | Yes |
 | `--name` | Federation name (FQN format) | Yes |
 
 Examples:
 ```bash
-till federate init --mode observer --name alice.dev.us
-till federate init --mode member --name team.company.us
+till federate init --mode named --name alice.dev.us
+till federate init --mode trusted --name team.company.us
 ```
 
 ### till federate status

@@ -41,7 +41,7 @@ make install-user
 till status
 
 # Install a new Tekton instance
-till install --mode solo
+till install --mode anonymous
 # OR interactive mode
 till install -i
 ```
@@ -70,7 +70,7 @@ till run tekton stop
 
 ```bash
 till install [options]        # Install new Tekton instance
-  --mode MODE                # solo, observer, member, coder-[a-c]
+  --mode MODE                # anonymous, named, trusted, coder-[a-c]
   --name NAME                # Registry name (FQN format)
   --path PATH                # Installation directory
   --port-base PORT           # Starting port (8000, 8100, etc.)
@@ -182,7 +182,7 @@ Till stores its configuration in `~/.till/`:
       "main_root": "/path/to/Tekton",
       "port_base": 8000,
       "ai_port_base": 45000,
-      "mode": "solo"
+      "mode": "anonymous"
     }
   }
 }

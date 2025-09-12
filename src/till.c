@@ -189,7 +189,7 @@ static void print_usage(const char *program) {
     printf("  till                      # Show what would be synced\n");
     printf("  till sync                 # Synchronize now\n");
     printf("  till install              # Install Tekton\n");
-    printf("  till install --mode solo  # Solo installation\n");
+    printf("  till install --mode anonymous  # Anonymous installation\n");
     printf("  till host add laptop casey@192.168.1.100\n");
     printf("\nFor detailed help on a command, use:\n");
     printf("  till help <command>     # Show help for specific command\n");

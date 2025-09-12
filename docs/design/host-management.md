@@ -27,7 +27,7 @@ Till implements a two-layer federation approach:
 
 2. **Application Layer (GitHub Federation)**
    - Applications have tribal membership
-   - Observers and members at application level
+   - Named and trusted participants at application level
    - GitHub-based discovery and registration
    - Component and solution sharing
 

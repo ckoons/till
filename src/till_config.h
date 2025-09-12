@@ -34,7 +34,7 @@
 #define TILL_HOSTS_CONFIG "till-hosts.json"
 
 /* Federation Configuration */
-#define TILL_DEFAULT_MODE "solo"
+#define TILL_DEFAULT_MODE "anonymous"
 #define TILL_FEDERATION_BRANCH "federation"
 #define TILL_REGISTRATION_PREFIX "registration-"
 #define TILL_DEREGISTRATION_PREFIX "deregistration-"
@@ -102,10 +102,13 @@
 #define GIT_CMD "git"
 #define GH_CMD "gh"
 
-/* Installation Modes */
-#define MODE_SOLO "solo"
-#define MODE_OBSERVER "observer"
-#define MODE_MEMBER "member"
+/* Installation Modes / Federation Trust Levels */
+#define MODE_SOLO "anonymous"       /* Deprecated - use MODE_ANONYMOUS */
+#define MODE_OBSERVER "named"        /* Deprecated - use MODE_NAMED */
+#define MODE_MEMBER "trusted"        /* Deprecated - use MODE_TRUSTED */
+#define MODE_ANONYMOUS "anonymous"   /* Read-only federation access */
+#define MODE_NAMED "named"           /* Standard federation membership */
+#define MODE_TRUSTED "trusted"       /* Full federation participation */
 
 /* Component Status */
 #define STATUS_INSTALLED "installed"

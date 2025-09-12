@@ -19,7 +19,7 @@ Think of it as a social network for Tekton instances.
 - **Registry**: Not listed anywhere
 
 ```bash
-till install tekton --mode solo
+till install tekton --mode anonymous
 ```
 
 ### Observer Mode
@@ -29,8 +29,8 @@ till install tekton --mode solo
 - **Registry**: Appears in federation listings
 
 ```bash
-till install tekton --name alice.research.edu --mode observer
-till federate init --mode observer
+till install tekton --name alice.research.edu --mode named
+till federate init --mode named
 ```
 
 ### Member Mode
@@ -40,8 +40,8 @@ till federate init --mode observer
 - **Registry**: Full federation participant
 
 ```bash
-till install tekton --name alice.research.edu --mode member
-till federate init --mode member
+till install tekton --name alice.research.edu --mode trusted
+till federate init --mode trusted
 ```
 
 ## Naming Your Tekton
@@ -67,10 +67,10 @@ Examples:
 First-come, first-served:
 ```bash
 # If 'alice' is available, you get the clean namespace
-till install tekton --name alice --mode member
+till install tekton --name alice --mode trusted
 
 # If taken, you must qualify
-till install tekton --name alice.research.edu --mode member
+till install tekton --name alice.research.edu --mode trusted
 ```
 
 ## Joining the Federation
@@ -80,7 +80,7 @@ till install tekton --name alice.research.edu --mode member
 ```bash
 till install tekton \
   --name alice.research.edu \
-  --mode member
+  --mode trusted
 ```
 
 ### Step 2: Initialize Federation
@@ -104,7 +104,7 @@ till federate status
 Expected output:
 ```
 Federation Status: Active
-Mode: member
+Mode: trusted
 Name: alice.research.edu
 Public Key: Registered
 Last Sync: 2024-01-01 12:00:00
@@ -115,14 +115,14 @@ Last Sync: 2024-01-01 12:00:00
 ### Viewing Other Tektons
 
 ```bash
-# See all federation members
+# See all federation participants
 tekton status --federation
 
 # Filter by domain
 tekton status --federation --domain research
 
-# Show only members
-tekton status --federation --members-only
+# Show only trusted participants
+tekton status --federation --trusted-only
 ```
 
 ### Trust Levels
@@ -133,12 +133,12 @@ Configure how you interact with others:
 {
   "relationships": {
     "bob.research.uk": {
-      "role": "member",
+      "role": "trusted",
       "trust": "high",
       "accept_updates": true
     },
     "eve.unknown.net": {
-      "role": "observer",
+      "role": "named",
       "trust": "low",
       "accept_updates": false
     }
@@ -148,7 +148,7 @@ Configure how you interact with others:
 
 ### Asymmetric Relationships
 
-You can trust Bob as a member while Bob only observes you:
+You can trust Bob as trusted while Bob only treats you as named:
 - You accept Bob's updates
 - Bob doesn't accept yours
 - Natural and expected
@@ -243,7 +243,7 @@ Every update is signed with your private key:
 
 1. **Learn First**: Watch how others organize
 2. **Test Locally**: Try components in Coder environments
-3. **Upgrade Later**: Become a member when ready
+3. **Upgrade Later**: Become trusted when ready
 
 ### For Members
 
@@ -256,7 +256,7 @@ Every update is signed with your private key:
 
 1. **Regular Syncs**: Run `till sync` daily
 2. **Keep Updated**: Apply security updates promptly
-3. **Respect Privacy**: Don't probe solo instances
+3. **Respect Privacy**: Don't probe anonymous instances
 4. **Report Issues**: Help improve the federation
 
 ## Troubleshooting
@@ -276,7 +276,7 @@ Error: Registration failed
 
 **Verify**:
 1. Registration completed: `till federate status`
-2. Mode is correct: Not `solo`
+2. Mode is correct: Not `anonymous`
 3. Branch was pushed: Check GitHub
 
 ### Can't See Other Tektons
@@ -331,11 +331,11 @@ ACME Corporation uses federation internally:
 
 ```bash
 # Production Tekton
-till install tekton --name acme.production.internal --mode member
+till install tekton --name acme.production.internal --mode trusted
 
 # Development Tektons
-till install tekton --name acme.dev.internal.team1 --mode member
-till install tekton --name acme.dev.internal.team2 --mode member
+till install tekton --name acme.dev.internal.team1 --mode trusted
+till install tekton --name acme.dev.internal.team2 --mode trusted
 
 # All can share within the company federation
 ```
@@ -345,15 +345,15 @@ till install tekton --name acme.dev.internal.team2 --mode member
 Charlie wants to learn:
 
 ```bash
-# Join as observer
-till install tekton --name charlie.learning.home --mode observer
+# Join as named participant
+till install tekton --name charlie.learning.home --mode named
 
 # Watch and learn
 till sync
 tekton status --federation
 
-# Later upgrade to member
-till federate upgrade --mode member
+# Later upgrade to trusted
+till federate upgrade --mode trusted
 ```
 
 ## Next Steps

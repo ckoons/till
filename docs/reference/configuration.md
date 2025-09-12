@@ -42,7 +42,7 @@ Stores all discovered and installed Tekton instances.
       "main_root": "/Users/casey/projects/github/Tekton",
       "port_base": 8000,
       "ai_port_base": 45000,
-      "mode": "member",
+      "mode": "trusted",
       "installed": "2025-01-05T10:00:00Z",
       "last_sync": "2025-01-05T15:00:00Z",
       "hold": false
@@ -52,7 +52,7 @@ Stores all discovered and installed Tekton instances.
       "main_root": "/Users/casey/projects/github/Tekton",
       "port_base": 8100,
       "ai_port_base": 45100,
-      "mode": "solo",
+      "mode": "anonymous",
       "installed": "2025-01-05T11:00:00Z",
       "last_sync": "2025-01-05T15:00:00Z",
       "hold": false
@@ -69,7 +69,7 @@ Stores all discovered and installed Tekton instances.
 - `main_root`: Primary Tekton path (for Coder-X)
 - `port_base`: Starting port for components
 - `ai_port_base`: Starting port for AI components
-- `mode`: Installation mode (solo/observer/member)
+- `mode`: Installation mode (anonymous/named/trusted)
 - `installed`: Installation timestamp
 - `last_sync`: Last synchronization timestamp
 - `hold`: If true, prevents updates
@@ -244,7 +244,7 @@ Trust relationships with other Tekton instances.
 
 ```json
 {
-  "mode": "member",
+  "mode": "trusted",
   "identity": {
     "fqn": "alice.development.us",
     "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...",
@@ -253,7 +253,7 @@ Trust relationships with other Tekton instances.
   },
   "relationships": {
     "bob.development.uk": {
-      "role": "member",
+      "role": "trusted",
       "trust_level": "high",
       "accept_updates": true,
       "accept_components": ["numa", "rhetor"],
@@ -267,7 +267,7 @@ Trust relationships with other Tekton instances.
       }
     },
     "charlie.research.de": {
-      "role": "observer",
+      "role": "named",
       "trust_level": "medium",
       "accept_updates": false,
       "accept_components": [],
@@ -280,7 +280,7 @@ Trust relationships with other Tekton instances.
   "pending": {
     "dave.testing.au": {
       "requested": "2025-01-05T15:00:00Z",
-      "role": "observer",
+      "role": "named",
       "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5DDDD..."
     }
   }
@@ -353,7 +353,7 @@ Environment configuration for Tekton instances.
 TEKTON_ROOT="/Users/casey/projects/github/Tekton"
 TEKTON_MAIN_ROOT="/Users/casey/projects/github/Tekton"
 TEKTON_REGISTRY_NAME="primary.tekton.development.us"
-TEKTON_MODE="member"
+TEKTON_MODE="trusted"
 
 # Port Configuration
 TEKTON_PORT_BASE=8000
@@ -372,7 +372,7 @@ APOLLO_PORT=8012
 APOLLO_AI_PORT=45012
 
 # Federation
-TEKTON_FEDERATION_MODE="member"
+TEKTON_FEDERATION_MODE="trusted"
 TEKTON_FEDERATION_NAME="primary.tekton.development.us"
 TEKTON_FEDERATION_KEY="/Users/casey/.till/ssh/till_federation_ed25519"
 
@@ -392,13 +392,13 @@ Location: `~/.till/logs/till.log`
 Main Till operation log.
 
 ```
-2025-01-05 10:00:00 [START] till install tekton --mode member
+2025-01-05 10:00:00 [START] till install tekton --mode trusted
 2025-01-05 10:00:01 [INFO] Cloning Tekton from GitHub
 2025-01-05 10:00:15 [INFO] Generating .env.local
 2025-01-05 10:00:16 [INFO] Allocating ports: 8000-8099, 45000-45099
 2025-01-05 10:00:17 [INFO] Registration: primary.tekton.development.us
 2025-01-05 10:00:18 [SUCCESS] Installation complete
-2025-01-05 10:00:18 [END] till install tekton --mode member
+2025-01-05 10:00:18 [END] till install tekton --mode trusted
 
 2025-01-05 15:00:00 [START] till sync
 2025-01-05 15:00:01 [DISCOVER] Searching in /Users/casey/projects/github

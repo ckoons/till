@@ -174,7 +174,7 @@ int discover_tektons(void) {
                         cJSON_AddNumberToObject(inst, "ai_port_base", ai_port);
                     }
                     
-                    cJSON_AddStringToObject(inst, "mode", "solo");
+                    cJSON_AddStringToObject(inst, "mode", "anonymous");
                     cJSON_AddItemToObject(installations, inst_name, inst);
                     
                     printf("  [OK] Found: %s at %s\n", inst_name, full_path);
@@ -353,7 +353,7 @@ int register_installation(const char *name, const char *path, int main_port, int
     cJSON_AddStringToObject(inst, "main_root", main_root);
     cJSON_AddNumberToObject(inst, "port_base", main_port);
     cJSON_AddNumberToObject(inst, "ai_port_base", ai_port);
-    cJSON_AddStringToObject(inst, "mode", mode ? mode : "solo");
+    cJSON_AddStringToObject(inst, "mode", mode ? mode : "anonymous");
     
     /* Add or update */
     cJSON_DeleteItemFromObject(installations, name);
