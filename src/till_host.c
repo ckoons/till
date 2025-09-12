@@ -770,10 +770,15 @@ int till_host_sync(void) {
         if (strcmp(till_configured, "yes") == 0) {
             printf("  Updating '%s'...\n", host_name);
             
-            /* Create command to write hosts file */
-            char cmd[10240];
+            /* First create the .till directory */
+            char mkdir_cmd[256];
+            snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p ~/.till");
+            run_ssh_command(user, hostname, port, mkdir_cmd, NULL, 0);
+            
+            /* Use cat with heredoc to write the file safely */
+            char cmd[20480];
             snprintf(cmd, sizeof(cmd),
-                    "mkdir -p ~/.till && echo '%s' > ~/.till/hosts-local.json",
+                    "cat > ~/.till/hosts-local.json << 'EOF'\n%s\nEOF",
                     hosts_json_str);
             
             if (run_ssh_command(user, hostname, port, cmd, NULL, 0) == 0) {
