@@ -98,11 +98,27 @@ int till_host_add(const char *name, const char *user_at_host) {
     }
     
     /* Check if host already exists */
+<<<<<<< Updated upstream
     if (cJSON_GetObjectItem(hosts, name)) {
         till_log(LOG_ERROR, "Host '%s' already exists", name);
         till_error("Host '%s' already exists\n", name);
         cJSON_Delete(json);
         return -1;
+=======
+    cJSON *existing_host = cJSON_GetObjectItem(hosts, name);
+    if (existing_host) {
+        /* Check if it's a removed host that can be re-added */
+        const char *state = cJSON_GetStringValue(cJSON_GetObjectItem(existing_host, "state"));
+        if (state && strcmp(state, "removed") == 0) {
+            printf("Re-activating previously removed host '%s'\n", name);
+            /* Remove the old entry to replace with fresh one */
+            cJSON_DeleteItemFromObject(hosts, name);
+        } else {
+            fprintf(stderr, "Error: Host '%s' already exists and is active\n", name);
+            cJSON_Delete(json);
+            return -1;
+        }
+>>>>>>> Stashed changes
     }
     
     /* Add host entry */
