@@ -361,14 +361,21 @@ int till_federate_status(void) {
 /* Main federate command handler */
 int cmd_federate(int argc, char *argv[]) {
     if (argc < 2) {
-        printf("Usage: till federate <command> [options]\n");
-        printf("\nCommands:\n");
-        printf("  join [--anonymous|--named|--trusted]  Join the federation\n");
-        printf("  leave [--delete-gist]                 Leave the federation\n");
-        printf("  pull                                  Get menu-of-the-day\n");
-        printf("  push                                  Update your gist\n");
-        printf("  sync                                  Pull, process, and push\n");
-        printf("  status                                Show federation status\n");
+        printf("Till Federation Commands\n");
+        printf("========================\n\n");
+        printf("Usage: till federate <command> [options]\n\n");
+        printf("Commands:\n");
+        printf("  join      Join the federation at specified trust level\n");
+        printf("  leave     Leave the federation\n");
+        printf("  status    Show current federation status\n");
+        printf("  pull      Pull updates from federation (menu-of-the-day)\n");
+        printf("  push      Push status to federation gist\n");
+        printf("  sync      Synchronize with federation (pull + push)\n");
+        printf("  help      Show detailed help message\n\n");
+        printf("Quick Examples:\n");
+        printf("  till federate join --anonymous\n");
+        printf("  till federate status\n");
+        printf("\nUse 'till federate help' for more details\n");
         return 0;
     }
     
@@ -417,8 +424,36 @@ int cmd_federate(int argc, char *argv[]) {
         printf("Federation sync not yet implemented\n");
         return 0;
     }
+    else if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "help") == 0) {
+        // Show help
+        printf("Till Federation Commands\n");
+        printf("========================\n\n");
+        printf("Usage: till federate <command> [options]\n\n");
+        printf("Commands:\n");
+        printf("  join      Join the federation at specified trust level\n");
+        printf("  leave     Leave the federation\n");
+        printf("  status    Show current federation status\n");
+        printf("  pull      Pull updates from federation (menu-of-the-day)\n");
+        printf("  push      Push status to federation gist\n");
+        printf("  sync      Synchronize with federation (pull + push)\n");
+        printf("  help      Show this help message\n\n");
+        printf("Join Options:\n");
+        printf("  --anonymous       Join as anonymous (read-only, no identity)\n");
+        printf("  --named          Join as named member (requires GitHub token)\n");
+        printf("  --trusted        Join as trusted member (full telemetry)\n");
+        printf("  --token <token>  Provide GitHub personal access token\n\n");
+        printf("Leave Options:\n");
+        printf("  --delete-gist    Delete the GitHub gist when leaving\n\n");
+        printf("Examples:\n");
+        printf("  till federate join --anonymous\n");
+        printf("  till federate join --named --token ghp_xxxx\n");
+        printf("  till federate status\n");
+        printf("  till federate leave\n");
+        return 0;
+    }
     else {
         till_error("Unknown federate command: %s", subcmd);
+        printf("\nUse 'till federate help' for usage information\n");
         return -1;
     }
 }
