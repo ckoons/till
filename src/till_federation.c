@@ -17,20 +17,68 @@
 #include "till_common.h"
 #include "cJSON.h"
 
+/* Get global federation config path in user's home directory */
+static int get_federation_config_path(char *path, size_t size) {
+    const char *home = getenv("HOME");
+    if (!home) {
+        till_error("Cannot determine HOME directory");
+        return -1;
+    }
+    
+    snprintf(path, size, "%s/.till/federation.json", home);
+    return 0;
+}
+
+/* Ensure global till directory exists */
+static int ensure_global_till_dir(void) {
+    const char *home = getenv("HOME");
+    if (!home) {
+        return -1;
+    }
+    
+    char path[TILL_MAX_PATH];
+    snprintf(path, sizeof(path), "%s/.till", home);
+    
+    struct stat st;
+    if (stat(path, &st) == -1) {
+        if (mkdir(path, 0755) == -1) {
+            till_error("Cannot create global till directory: %s", strerror(errno));
+            return -1;
+        }
+    }
+    
+    return 0;
+}
+
 /* Check if federation is configured */
 int federation_is_joined(void) {
     char path[TILL_MAX_PATH];
-    if (build_till_path(path, sizeof(path), "federation.json") != 0) {
+    if (get_federation_config_path(path, sizeof(path)) != 0) {
         return 0;
     }
-    return path_exists(path);
+    
+    struct stat st;
+    int result = (stat(path, &st) == 0);
+    
+    /* Debug output */
+    if (getenv("TILL_DEBUG")) {
+        fprintf(stderr, "DEBUG: Checking federation config at: %s (exists: %s)\n", 
+                path, result ? "yes" : "no");
+    }
+    
+    return result;
 }
 
 /* Load federation configuration */
 int load_federation_config(federation_config_t *config) {
     if (!config) return -1;
     
-    cJSON *json = load_till_json("federation.json");
+    char path[TILL_MAX_PATH];
+    if (get_federation_config_path(path, sizeof(path)) != 0) {
+        return -1;
+    }
+    
+    cJSON *json = load_json_file(path);
     if (!json) {
         return -1;
     }
@@ -59,6 +107,16 @@ int load_federation_config(federation_config_t *config) {
 int save_federation_config(const federation_config_t *config) {
     if (!config) return -1;
     
+    /* Ensure global till directory exists */
+    if (ensure_global_till_dir() != 0) {
+        return -1;
+    }
+    
+    char path[TILL_MAX_PATH];
+    if (get_federation_config_path(path, sizeof(path)) != 0) {
+        return -1;
+    }
+    
     cJSON *json = cJSON_CreateObject();
     if (!json) return -1;
     
@@ -70,7 +128,7 @@ int save_federation_config(const federation_config_t *config) {
     cJSON_AddBoolToObject(json, "auto_sync", config->auto_sync);
     cJSON_AddStringToObject(json, "last_menu_date", config->last_menu_date);
     
-    int result = save_till_json("federation.json", json);
+    int result = save_json_file(path, json);
     cJSON_Delete(json);
     
     return result;
@@ -301,9 +359,9 @@ int till_federate_leave(int delete_gist) {
         printf("  Would delete gist: %s\n", config.gist_id);
     }
     
-    /* Remove local configuration */
+    /* Remove global configuration */
     char path[TILL_MAX_PATH];
-    if (build_till_path(path, sizeof(path), "federation.json") == 0) {
+    if (get_federation_config_path(path, sizeof(path)) == 0) {
         if (unlink(path) == 0) {
             printf("✓ Left federation successfully\n");
             return 0;
