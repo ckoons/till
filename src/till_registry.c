@@ -140,6 +140,9 @@ int discover_tektons(void) {
     struct dirent *entry;
     int found_count = 0;
     
+    /* Track which installations we find */
+    cJSON *found_installations = cJSON_CreateObject();
+    
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.') continue;
         
@@ -190,12 +193,34 @@ int discover_tektons(void) {
                     }
                     found_count++;
                 }
+                
+                /* Mark this installation as found */
+                cJSON_AddBoolToObject(found_installations, inst_name, 1);
             }
             /* If we can't get the installation name, just skip it silently */
         }
     }
     
     closedir(dir);
+    
+    /* Remove installations that no longer exist */
+    cJSON *inst_to_check = installations->child;
+    while (inst_to_check) {
+        cJSON *next = inst_to_check->next;
+        const char *inst_name = inst_to_check->string;
+        
+        /* Check if this installation was found */
+        if (!cJSON_GetObjectItem(found_installations, inst_name)) {
+            /* Installation no longer exists - remove it */
+            printf("  [REMOVED] %s no longer exists\n", inst_name);
+            cJSON_DeleteItemFromObject(installations, inst_name);
+        }
+        
+        inst_to_check = next;
+    }
+    
+    /* Clean up tracking object */
+    cJSON_Delete(found_installations);
     
     /* Update last discovery time */
     time_t now = time(NULL);
