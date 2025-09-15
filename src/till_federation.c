@@ -291,6 +291,17 @@ int till_federate_join(const char *trust_level, const char *token_arg) {
     if (token_arg && strlen(token_arg) > 0) {
         strncpy(token, token_arg, sizeof(token) - 1);
     } else {
+        /* For non-interactive use, require token on command line */
+        if (!isatty(STDIN_FILENO)) {
+            till_error("GitHub personal access token required for %s membership", trust_level);
+            printf("Use: till federate join --%s --token <token>\n", trust_level);
+            return -1;
+        }
+        
+        printf("GitHub personal access token required for %s membership.\n", trust_level);
+        printf("Create a token at: https://github.com/settings/tokens\n");
+        printf("Required scope: gist\n\n");
+        
         if (prompt_for_token(token, sizeof(token)) != 0) {
             till_error("Failed to get GitHub token");
             return -1;

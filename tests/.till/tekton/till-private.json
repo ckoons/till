@@ -1,0 +1,30 @@
+{
+	"installations":	{
+		"coder-c.tekton.development.us":	{
+			"root":	"/Users/cskoons/projects/github/Coder-C",
+			"main_root":	"/Users/cskoons/projects/github/Tekton",
+			"mode":	"anonymous"
+		},
+		"coder-d.tekton.development.us":	{
+			"root":	"/Users/cskoons/projects/github/Coder-D",
+			"main_root":	"/Users/cskoons/projects/github/Tekton",
+			"mode":	"anonymous"
+		},
+		"coder-b.tekton.development.us":	{
+			"root":	"/Users/cskoons/projects/github/Coder-B",
+			"main_root":	"/Users/cskoons/projects/github/Tekton",
+			"mode":	"anonymous"
+		},
+		"primary.tekton.development.us":	{
+			"root":	"/Users/cskoons/projects/github/Tekton",
+			"main_root":	"/Users/cskoons/projects/github/Tekton",
+			"mode":	"anonymous"
+		},
+		"coder-a.tekton.development.us":	{
+			"root":	"/Users/cskoons/projects/github/Coder-A",
+			"main_root":	"/Users/cskoons/projects/github/Tekton",
+			"mode":	"anonymous"
+		}
+	},
+	"last_discovery":	"2025-09-15T14:14:41"
+}
