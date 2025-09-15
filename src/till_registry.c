@@ -117,8 +117,14 @@ int discover_tektons(void) {
     path_join(search_dir, sizeof(search_dir), home, TILL_PROJECTS_BASE);
     
     till_log(LOG_INFO, "Discovering Tekton installations in %s", search_dir);
-    printf("Discovering existing Tekton installations...\n");
-    printf("Searching in TEKTON_ROOT parent: %s\n", search_dir);
+    
+    /* Allow quiet discovery mode */
+    int quiet = getenv("TILL_QUIET_DISCOVERY") != NULL;
+    
+    if (!quiet) {
+        printf("Discovering existing Tekton installations...\n");
+        printf("Searching in TEKTON_ROOT parent: %s\n", search_dir);
+    }
     
     /* Load or create registry */
     cJSON *registry = load_or_create_registry();
@@ -180,16 +186,22 @@ int discover_tektons(void) {
                     cJSON_AddStringToObject(inst, "mode", "anonymous");
                     cJSON_AddItemToObject(installations, inst_name, inst);
                     
-                    printf("  [OK] Found: %s at %s\n", inst_name, full_path);
+                    if (!quiet) {
+                        printf("  [OK] Found: %s at %s\n", inst_name, full_path);
+                    }
                     found_count++;
                 } else {
                     /* Update path if changed */
                     cJSON *root_item = cJSON_GetObjectItem(existing, "root");
                     if (root_item && strcmp(root_item->valuestring, full_path) != 0) {
                         cJSON_SetValuestring(root_item, full_path);
-                        printf("  [OK] Updated: %s at %s\n", inst_name, full_path);
+                        if (!quiet) {
+                            printf("  [OK] Updated: %s at %s\n", inst_name, full_path);
+                        }
                     } else {
+                        if (!quiet) {
                         printf("  [OK] Found: %s at %s\n", inst_name, full_path);
+                    }
                     }
                     found_count++;
                 }
@@ -212,7 +224,9 @@ int discover_tektons(void) {
         /* Check if this installation was found */
         if (!cJSON_GetObjectItem(found_installations, inst_name)) {
             /* Installation no longer exists - remove it */
-            printf("  [REMOVED] %s no longer exists\n", inst_name);
+            if (!quiet) {
+                printf("  [REMOVED] %s no longer exists\n", inst_name);
+            }
             cJSON_DeleteItemFromObject(installations, inst_name);
         }
         
@@ -238,10 +252,12 @@ int discover_tektons(void) {
     /* Save registry */
     int save_result = save_till_json("tekton/till-private.json", registry);
     if (save_result == 0) {
-        if (found_count > 0) {
-            printf("Found %d Tekton installation(s) - registry updated\n", found_count);
-        } else {
-            printf("Found %d Tekton installation(s) - no changes\n", found_count);
+        if (!quiet) {
+            if (found_count > 0) {
+                printf("Found %d Tekton installation(s) - registry updated\n", found_count);
+            } else {
+                printf("Found %d Tekton installation(s) - no changes\n", found_count);
+            }
         }
         till_log(LOG_INFO, "Discovery complete: %d installations found", found_count);
     } else {

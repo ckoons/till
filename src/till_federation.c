@@ -510,8 +510,24 @@ int cmd_federate(int argc, char *argv[]) {
         return 0;
     }
     else {
-        till_error("Unknown federate command: %s", subcmd);
-        printf("\nUse 'till federate help' for usage information\n");
+        /* Check if user tried to use a flag as a command */
+        if (subcmd[0] == '-') {
+            if (strcmp(subcmd, "--anonymous") == 0 || 
+                strcmp(subcmd, "--named") == 0 || 
+                strcmp(subcmd, "--trusted") == 0) {
+                fprintf(stderr, "Error: '%s' is a join option, not a command\n", subcmd);
+                fprintf(stderr, "\nDid you mean: till federate join %s\n", subcmd);
+                fprintf(stderr, "\nUse 'till federate help' for usage information\n");
+            } else {
+                fprintf(stderr, "Error: Unknown option: %s\n", subcmd);
+                fprintf(stderr, "\nUse 'till federate help' for usage information\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Unknown federate command: %s\n", subcmd);
+            fprintf(stderr, "\nAvailable commands: join, leave, status, pull, push, sync, help\n");
+            fprintf(stderr, "Use 'till federate help' for usage information\n");
+        }
+        fflush(stderr);
         return -1;
     }
 }
