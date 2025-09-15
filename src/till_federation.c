@@ -173,6 +173,112 @@ int decrypt_token(const char *encrypted, char *plain, size_t size) {
     return 0;
 }
 
+/* Get token from gh CLI */
+static int get_gh_token(char *token, size_t size) {
+    FILE *fp;
+    char buffer[256];
+    
+    /* Check if gh is authenticated */
+    fp = popen("gh auth status >/dev/null 2>&1 && echo 'ok'", "r");
+    if (fp == NULL) {
+        return -1;
+    }
+    
+    if (fgets(buffer, sizeof(buffer), fp) == NULL || strncmp(buffer, "ok", 2) != 0) {
+        pclose(fp);
+        return -1;
+    }
+    pclose(fp);
+    
+    /* Get the token */
+    fp = popen("gh auth token 2>/dev/null", "r");
+    if (fp == NULL) {
+        return -1;
+    }
+    
+    if (fgets(token, size, fp) != NULL) {
+        /* Remove newline */
+        size_t len = strlen(token);
+        if (len > 0 && token[len-1] == '\n') {
+            token[len-1] = '\0';
+        }
+        pclose(fp);
+        
+        /* Validate token has some length */
+        if (strlen(token) > 10) {
+            return 0;
+        }
+    }
+    
+    pclose(fp);
+    return -1;
+}
+
+/* Check if gh has required scope */
+static int check_gh_scope(const char *scope) {
+    FILE *fp;
+    char buffer[1024];
+    
+    /* Get token scopes via API */
+    fp = popen("gh api user -i 2>/dev/null | grep 'X-OAuth-Scopes:'", "r");
+    if (fp == NULL) {
+        return 0;  /* Assume no scope if can't check */
+    }
+    
+    if (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        pclose(fp);
+        return (strstr(buffer, scope) != NULL) ? 1 : 0;
+    }
+    
+    pclose(fp);
+    return 0;
+}
+
+/* Setup gh authentication if needed */
+static int setup_gh_auth(void) {
+    char buffer[256];
+    FILE *fp;
+    
+    /* Check if gh is available */
+    fp = popen("command -v gh >/dev/null 2>&1 && echo 'ok'", "r");
+    if (fp == NULL) {
+        return -1;
+    }
+    
+    if (fgets(buffer, sizeof(buffer), fp) == NULL || strncmp(buffer, "ok", 2) != 0) {
+        pclose(fp);
+        printf("Error: GitHub CLI (gh) is required but not found.\n");
+        printf("Please install: https://cli.github.com/\n");
+        return -1;
+    }
+    pclose(fp);
+    
+    /* Check if authenticated */
+    fp = popen("gh auth status >/dev/null 2>&1 && echo 'ok'", "r");
+    if (fp == NULL) {
+        return -1;
+    }
+    
+    if (fgets(buffer, sizeof(buffer), fp) == NULL || strncmp(buffer, "ok", 2) != 0) {
+        pclose(fp);
+        printf("GitHub authentication required.\n");
+        printf("Please run: gh auth login -s gist\n");
+        printf("Then try again.\n");
+        return -1;
+    }
+    pclose(fp);
+    
+    /* Check for gist scope */
+    if (!check_gh_scope("gist")) {
+        printf("GitHub token missing 'gist' scope.\n");
+        printf("Please run: gh auth refresh -s gist\n");
+        printf("Then try again.\n");
+        return -1;
+    }
+    
+    return 0;
+}
+
 /* Prompt for GitHub token */
 int prompt_for_token(char *token, size_t size) {
     printf("Enter GitHub Personal Access Token (with gist scope): ");
@@ -289,22 +395,45 @@ int till_federate_join(const char *trust_level, const char *token_arg) {
     
     /* Named and Trusted need GitHub token */
     if (token_arg && strlen(token_arg) > 0) {
+        /* Token provided on command line */
         strncpy(token, token_arg, sizeof(token) - 1);
     } else {
-        /* For non-interactive use, require token on command line */
-        if (!isatty(STDIN_FILENO)) {
-            till_error("GitHub personal access token required for %s membership", trust_level);
-            printf("Use: till federate join --%s --token <token>\n", trust_level);
-            return -1;
-        }
-        
-        printf("GitHub personal access token required for %s membership.\n", trust_level);
-        printf("Create a token at: https://github.com/settings/tokens\n");
-        printf("Required scope: gist\n\n");
-        
-        if (prompt_for_token(token, sizeof(token)) != 0) {
-            till_error("Failed to get GitHub token");
-            return -1;
+        /* Try to get token from gh CLI first */
+        if (get_gh_token(token, sizeof(token)) == 0) {
+            printf("Using GitHub token from gh CLI\n");
+            
+            /* Verify scope */
+            if (!check_gh_scope("gist")) {
+                printf("Warning: Token may not have 'gist' scope\n");
+                printf("To add scope, run: gh auth refresh -s gist\n");
+            }
+        } else {
+            /* gh not available or not authenticated */
+            if (setup_gh_auth() != 0) {
+                /* Setup failed, try manual token */
+                if (!isatty(STDIN_FILENO)) {
+                    till_error("GitHub authentication required");
+                    printf("Please run: gh auth login -s gist\n");
+                    printf("Or use: till federate join --%s --token <token>\n", trust_level);
+                    return -1;
+                }
+                
+                printf("\nAlternatively, you can provide a token manually.\n");
+                printf("Create a token at: https://github.com/settings/tokens\n");
+                printf("Required scope: gist\n\n");
+                
+                if (prompt_for_token(token, sizeof(token)) != 0) {
+                    till_error("Failed to get GitHub token");
+                    return -1;
+                }
+            } else {
+                /* Try again after setup */
+                if (get_gh_token(token, sizeof(token)) != 0) {
+                    till_error("Failed to get token after setup");
+                    return -1;
+                }
+                printf("Using GitHub token from gh CLI\n");
+            }
         }
     }
     

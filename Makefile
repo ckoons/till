@@ -151,7 +151,32 @@ man: $(TARGET)
 	@echo "Till configuration directory" >> till.1
 	@echo "Man page generated"
 
-install: $(TARGET) man
+# Check prerequisites
+.PHONY: check-prereqs
+check-prereqs:
+	@echo "Checking prerequisites..."
+	@command -v git >/dev/null 2>&1 || { echo "Error: git is required but not installed."; echo "Please install: https://git-scm.com/"; exit 1; }
+	@command -v gh >/dev/null 2>&1 || { echo "Error: GitHub CLI (gh) is required but not installed."; echo "Please install: https://cli.github.com/"; exit 1; }
+	@echo "✓ Prerequisites verified (git, gh)"
+
+# Setup GitHub authentication
+.PHONY: setup-github
+setup-github:
+	@echo "Checking GitHub authentication..."
+	@if gh auth status >/dev/null 2>&1; then \
+		echo "✓ GitHub CLI authenticated"; \
+		if gh api user -i 2>/dev/null | grep -q "X-OAuth-Scopes:.*gist"; then \
+			echo "✓ Token has 'gist' scope for federation"; \
+		else \
+			echo "ℹ️  Token missing 'gist' scope (optional for federation)"; \
+			echo "   To add: gh auth refresh -s gist"; \
+		fi \
+	else \
+		echo "ℹ️  GitHub CLI not authenticated (optional)"; \
+		echo "   For federation features, run: gh auth login -s gist"; \
+	fi
+
+install: $(TARGET) man check-prereqs setup-github
 	@if [ -w /usr/local/bin ]; then \
 		echo "Installing till to /usr/local/bin..."; \
 		cp $(TARGET) /usr/local/bin/; \
@@ -183,7 +208,24 @@ install: $(TARGET) man
 	else \
 		echo "Using existing hosts-local.json"; \
 	fi
+	@echo ""
+	@echo "========================================="
+	@echo "✓ Till installation complete!"
+	@echo "========================================="
+	@echo ""
 	@echo "You can now run 'till' from anywhere"
+	@echo ""
+	@if gh auth status >/dev/null 2>&1; then \
+		echo "Federation Quick Start:"; \
+		echo "  till federate join --named    # Join with GitHub identity"; \
+		echo "  till federate status          # Check federation status"; \
+	else \
+		echo "To enable federation features:"; \
+		echo "  1. gh auth login -s gist     # Authenticate GitHub CLI"; \
+		echo "  2. till federate join --named # Join federation"; \
+	fi
+	@echo ""
+	@echo "For help: till --help"
 
 # Uninstall - removes from both locations
 uninstall:
