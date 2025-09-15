@@ -81,13 +81,28 @@ int evaluate_condition(const char *condition);
 int is_directive_completed(const char *directive_id);
 int mark_directive_completed(const char *directive_id);
 
+/* Federation status structure */
+typedef struct {
+    char site_id[128];
+    char hostname[128];
+    char platform[32];
+    int till_version;
+    int cpu_count;
+    int installation_count;
+    time_t uptime;
+    time_t last_sync;
+    char trust_level[32];
+} federation_status_t;
+
 /* Gist management */
-int create_federation_gist(const char *token, char *gist_id_out);
-int update_gist_file(const char *token, const char *gist_id, 
-                     const char *filename, const char *content);
-int update_gist_manifest(const federation_config_t *config);
-int update_gist_status(const federation_config_t *config);
-int update_gist_results(const federation_config_t *config, const char *results);
+int create_federation_gist(const char *token, const char *site_id, char *gist_id, size_t gist_id_size);
+int update_federation_gist(const char *token, const char *gist_id, const char *content);
+int delete_federation_gist(const char *token, const char *gist_id);
+int fetch_federation_gist(const char *gist_id, char *content, size_t content_size);
+
+/* Status collection */
+int collect_system_status(federation_status_t *status);
+int create_status_json(const federation_status_t *status, char *json, size_t json_size);
 
 /* GitHub API */
 int github_api_call(const char *method, const char *url, const char *token,

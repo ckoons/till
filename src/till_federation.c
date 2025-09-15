@@ -451,20 +451,18 @@ int till_federate_join(const char *trust_level, const char *token_arg) {
         return -1;
     }
     
-    /* Create gist with manifest */
-    printf("Creating GitHub Gist...\n");
-    
-    char manifest_json[4096];
-    if (create_manifest_json(manifest_json, sizeof(manifest_json), &config) != 0) {
-        till_error("Failed to create manifest");
-        return -1;
+    /* Create gist if not anonymous */
+    if (strcmp(trust_level, TRUST_ANONYMOUS) != 0) {
+        printf("Creating GitHub Gist...\n");
+        
+        /* Create the gist */
+        if (create_federation_gist(token, config.site_id, config.gist_id, sizeof(config.gist_id)) == 0) {
+            printf("  Created gist: %s\n", config.gist_id);
+        } else {
+            fprintf(stderr, "Warning: Failed to create gist. You can retry with 'till federate push'\n");
+            /* Don't fail join - user can retry push later */
+        }
     }
-    
-    /* TODO: Actually create the gist via GitHub API */
-    /* For now, simulate with a placeholder */
-    printf("  Would create gist with manifest:\n");
-    printf("  Site ID: %s\n", config.site_id);
-    printf("  Trust Level: %s\n", config.trust_level);
     
     /* Save configuration */
     if (save_federation_config(&config) == 0) {
@@ -494,9 +492,31 @@ int till_federate_leave(int delete_gist) {
     
     printf("Leaving federation...\n");
     
-    /* TODO: Delete gist if requested */
+    /* Delete gist if requested */
     if (delete_gist && strlen(config.gist_id) > 0) {
-        printf("  Would delete gist: %s\n", config.gist_id);
+        printf("  Deleting gist: %s\n", config.gist_id);
+        
+        /* Get GitHub token */
+        char token[256];
+        if (get_gh_token(token, sizeof(token)) == 0) {
+            if (delete_federation_gist(token, config.gist_id) == 0) {
+                printf("  ✓ Gist deleted\n");
+            } else {
+                fprintf(stderr, "  Warning: Failed to delete gist\n");
+            }
+        } else {
+            /* Try to decrypt stored token */
+            char plain_token[256];
+            if (decrypt_token(config.github_token, plain_token, sizeof(plain_token)) == 0) {
+                if (delete_federation_gist(plain_token, config.gist_id) == 0) {
+                    printf("  ✓ Gist deleted\n");
+                } else {
+                    fprintf(stderr, "  Warning: Failed to delete gist\n");
+                }
+            } else {
+                fprintf(stderr, "  Warning: No token available to delete gist\n");
+            }
+        }
     }
     
     /* Remove global configuration */
@@ -556,6 +576,148 @@ int till_federate_status(void) {
     return 0;
 }
 
+/* Pull updates from federation (menu-of-the-day) */
+int till_federate_pull(void) {
+    if (!federation_is_joined()) {
+        till_error("Not joined to federation. Use 'till federate join' first");
+        return -1;
+    }
+    
+    federation_config_t config;
+    if (load_federation_config(&config) != 0) {
+        till_error("Failed to load federation configuration");
+        return -1;
+    }
+    
+    printf("Pulling federation updates...\n");
+    
+    /* TODO: Implement menu-of-the-day fetching */
+    printf("  Checking for menu-of-the-day...\n");
+    printf("  (Menu fetching not yet implemented)\n");
+    
+    /* For now, just update last sync time */
+    config.last_sync = time(NULL);
+    save_federation_config(&config);
+    
+    printf("✓ Pull complete\n");
+    return 0;
+}
+
+/* Push status to federation gist */
+int till_federate_push(void) {
+    if (!federation_is_joined()) {
+        till_error("Not joined to federation. Use 'till federate join' first");
+        return -1;
+    }
+    
+    federation_config_t config;
+    if (load_federation_config(&config) != 0) {
+        till_error("Failed to load federation configuration");
+        return -1;
+    }
+    
+    /* Anonymous members cannot push */
+    if (strcmp(config.trust_level, TRUST_ANONYMOUS) == 0) {
+        printf("Federation push not available for anonymous members\n");
+        return 0;
+    }
+    
+    printf("Pushing status to federation...\n");
+    
+    /* Get GitHub token */
+    char token[256];
+    if (get_gh_token(token, sizeof(token)) != 0) {
+        /* Try to decrypt stored token */
+        if (decrypt_token(config.github_token, token, sizeof(token)) != 0) {
+            till_error("Failed to get GitHub token");
+            return -1;
+        }
+    }
+    
+    /* Collect system status */
+    federation_status_t status;
+    if (collect_system_status(&status) != 0) {
+        till_error("Failed to collect system status");
+        return -1;
+    }
+    
+    /* Copy site_id and trust_level to status */
+    strncpy(status.site_id, config.site_id, sizeof(status.site_id) - 1);
+    strncpy(status.trust_level, config.trust_level, sizeof(status.trust_level) - 1);
+    
+    /* Create status JSON */
+    char json[4096];
+    if (create_status_json(&status, json, sizeof(json)) != 0) {
+        till_error("Failed to create status JSON");
+        return -1;
+    }
+    
+    /* Create or update gist */
+    if (strlen(config.gist_id) == 0) {
+        /* Need to create gist */
+        printf("  Creating GitHub gist...\n");
+        if (create_federation_gist(token, config.site_id, config.gist_id, sizeof(config.gist_id)) != 0) {
+            till_error("Failed to create gist");
+            return -1;
+        }
+        printf("  Created gist: %s\n", config.gist_id);
+        
+        /* Save config with new gist ID */
+        save_federation_config(&config);
+    }
+    
+    /* Update gist with current status */
+    printf("  Updating gist status...\n");
+    if (update_federation_gist(token, config.gist_id, json) != 0) {
+        till_error("Failed to update gist");
+        return -1;
+    }
+    
+    /* Update last sync time */
+    config.last_sync = time(NULL);
+    save_federation_config(&config);
+    
+    printf("✓ Push complete\n");
+    printf("  Gist: https://gist.github.com/%s\n", config.gist_id);
+    return 0;
+}
+
+/* Synchronize with federation (pull + push) */
+int till_federate_sync(void) {
+    if (!federation_is_joined()) {
+        till_error("Not joined to federation. Use 'till federate join' first");
+        return -1;
+    }
+    
+    federation_config_t config;
+    if (load_federation_config(&config) != 0) {
+        till_error("Failed to load federation configuration");
+        return -1;
+    }
+    
+    printf("Starting federation sync...\n");
+    printf("========================\n\n");
+    
+    /* Step 1: Pull updates */
+    printf("Step 1: Pulling menu-of-the-day...\n");
+    if (till_federate_pull() != 0) {
+        fprintf(stderr, "Warning: Pull failed, continuing with push\n");
+    }
+    
+    /* Step 2: Push status (if not anonymous) */
+    if (strcmp(config.trust_level, TRUST_ANONYMOUS) != 0) {
+        printf("\nStep 2: Pushing status...\n");
+        if (till_federate_push() != 0) {
+            fprintf(stderr, "Warning: Push failed\n");
+        }
+    } else {
+        printf("\nStep 2: Push skipped (anonymous member)\n");
+    }
+    
+    printf("\n✓ Sync complete\n");
+    return 0;
+}
+
 /* Main federate command handler */
 int cmd_federate(int argc, char *argv[]) {
     if (argc < 2) {
@@ -611,16 +773,13 @@ int cmd_federate(int argc, char *argv[]) {
         return till_federate_status();
     }
     else if (strcmp(subcmd, "pull") == 0) {
-        printf("Federation pull not yet implemented\n");
-        return 0;
+        return till_federate_pull();
     }
     else if (strcmp(subcmd, "push") == 0) {
-        printf("Federation push not yet implemented\n");
-        return 0;
+        return till_federate_push();
     }
     else if (strcmp(subcmd, "sync") == 0) {
-        printf("Federation sync not yet implemented\n");
-        return 0;
+        return till_federate_sync();
     }
     else if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "help") == 0) {
         // Show help
