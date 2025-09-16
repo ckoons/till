@@ -120,4 +120,9 @@ int should_report_telemetry(const char *trust_level);
 /* Command handler */
 int cmd_federate(int argc, char *argv[]);
 
+/* Admin commands (owner only) */
+int till_federate_admin(int argc, char *argv[]);
+int till_federate_admin_process(void);
+int till_federate_admin_status(int full);
+
 #endif /* TILL_FEDERATION_H */

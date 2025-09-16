@@ -731,6 +731,7 @@ int cmd_federate(int argc, char *argv[]) {
         printf("  pull      Pull updates from federation (menu-of-the-day)\n");
         printf("  push      Push status to federation gist\n");
         printf("  sync      Synchronize with federation (pull + push)\n");
+        printf("  admin     Admin commands (owner only)\n");
         printf("  help      Show detailed help message\n\n");
         printf("Quick Examples:\n");
         printf("  till federate join --anonymous\n");
@@ -780,6 +781,9 @@ int cmd_federate(int argc, char *argv[]) {
     }
     else if (strcmp(subcmd, "sync") == 0) {
         return till_federate_sync();
+    }
+    else if (strcmp(subcmd, "admin") == 0) {
+        return till_federate_admin(argc, argv);
     }
     else if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "help") == 0) {
         // Show help
