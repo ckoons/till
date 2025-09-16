@@ -21,6 +21,7 @@
 #include "till_run.h"
 #include "till_registry.h"
 #include "till_common.h"
+#include "till_federation.h"
 #include "cJSON.h"
 
 /* External functions from till.c */
@@ -51,12 +52,16 @@ int cmd_sync(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--skip-till-update") == 0) {
             skip_till_update = 1;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            printf("Till Sync - Update Till and all Tekton installations\n\n");
+            printf("Till Sync - Update Till, Tekton installations, and federation\n\n");
             printf("Usage: till sync [options]\n\n");
             printf("Options:\n");
             printf("  --dry-run           Check for updates without applying\n");
             printf("  --skip-till-update  Don't update Till itself\n");
-            printf("  --help, -h          Show this help message\n");
+            printf("  --help, -h          Show this help message\n\n");
+            printf("Sync performs:\n");
+            printf("  1. Updates Till itself (unless --skip-till-update)\n");
+            printf("  2. Updates all Tekton installations\n");
+            printf("  3. Federation sync if joined (pull directives, push status)\n");
             return 0;
         }
     }
@@ -171,6 +176,12 @@ int cmd_sync(int argc, char *argv[]) {
     /* Record sync in schedule */
     if (!dry_run) {
         till_watch_record_sync(failed == 0, 0, updated, 0);
+    }
+    
+    /* Run federation sync if joined */
+    if (!dry_run && federation_is_joined()) {
+        printf("\nRunning federation sync...\n");
+        till_federate_sync();
     }
     
     return failed > 0 ? 1 : 0;
