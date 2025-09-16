@@ -150,21 +150,20 @@ static int get_or_create_secret_gist(char *gist_id, size_t gist_id_size) {
     /* Create new secret gist */
     printf("Creating secret gist for admin status...\n");
     
-    /* Create temp file for initial content */
-    char temp_file[] = "/tmp/till_admin_init_XXXXXX";
-    int fd = mkstemp(temp_file);
-    if (fd == -1) {
+    /* Create status.json file directly */
+    const char *temp_file = "/tmp/status.json";
+    FILE *tf = fopen(temp_file, "w");
+    if (tf == NULL) {
         fprintf(stderr, "Error: Failed to create temp file\n");
         return -1;
     }
     
-    char initial_content[] = "{\"last_processed\":null,\"total_sites\":0,\"sites\":{},\"statistics\":{}}";
-    write(fd, initial_content, strlen(initial_content));
-    close(fd);
+    fprintf(tf, "{\"last_processed\":null,\"total_sites\":0,\"sites\":{},\"statistics\":{}}");
+    fclose(tf);
     
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "gh gist create %s --desc \"%s\" 2>&1",  /* secret is default */
+        "gh gist create %s --desc \"%s\" 2>/dev/null | head -1",  /* secret is default */
         temp_file, SECRET_GIST_DESC);
     
     fp = popen(cmd, "r");
@@ -174,31 +173,31 @@ static int get_or_create_secret_gist(char *gist_id, size_t gist_id_size) {
         return -1;
     }
     
-    char full_output[1024] = {0};
-    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-        strcat(full_output, buffer);
-    }
-    pclose(fp);
-    
-    if (strlen(full_output) > 0) {
-        /* Extract gist ID from URL */
-        char *id = strrchr(full_output, '/');
-        if (id) {
-            id++;
-            full_output[strcspn(full_output, "\n")] = '\0';
-            strncpy(gist_id, id, gist_id_size - 1);
-            gist_id[gist_id_size - 1] = '\0';
-            
-            /* Save for future use */
-            strncpy(config.secret_gist_id, gist_id, sizeof(config.secret_gist_id) - 1);
-            save_admin_config(&config);
-            
-            unlink(temp_file);
-            printf("Created secret gist: %s\n", gist_id);
-            return 0;
-        } else {
-            fprintf(stderr, "Error: Failed to extract gist ID from: %s\n", full_output);
+    /* Read first line which contains the URL */
+    if (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        /* Remove newline */
+        buffer[strcspn(buffer, "\n")] = '\0';
+        
+        /* Check if it's a URL */
+        if (strstr(buffer, "https://gist.github.com/") != NULL) {
+            /* Extract gist ID from URL */
+            char *id = strrchr(buffer, '/');
+            if (id) {
+                id++;
+                strncpy(gist_id, id, gist_id_size - 1);
+                gist_id[gist_id_size - 1] = '\0';
+                
+                /* Save for future use */
+                strncpy(config.secret_gist_id, gist_id, sizeof(config.secret_gist_id) - 1);
+                save_admin_config(&config);
+                
+                pclose(fp);
+                unlink(temp_file);
+                printf("Created secret gist: %s\n", gist_id);
+                return 0;
+            }
         }
+        fprintf(stderr, "Error: Unexpected output: %s\n", buffer);
     } else {
         fprintf(stderr, "Error: No output from gist create command\n");
     }
@@ -414,22 +413,22 @@ int till_federate_admin_process(void) {
     printf("\nSaving report to secret gist...\n");
     char *report_json = cJSON_Print(report);
     
-    /* Create temp file */
-    char temp_file[] = "/tmp/till_admin_XXXXXX";
-    int fd = mkstemp(temp_file);
-    if (fd == -1) {
+    /* Create status.json file */
+    const char *temp_file = "/tmp/status.json";
+    FILE *tf = fopen(temp_file, "w");
+    if (tf == NULL) {
         fprintf(stderr, "Error: Failed to create temp file\n");
         free(report_json);
         cJSON_Delete(report);
         return -1;
     }
     
-    write(fd, report_json, strlen(report_json));
-    close(fd);
+    fprintf(tf, "%s", report_json);
+    fclose(tf);
     
-    /* Update gist */
+    /* Update gist - delete old file and add new one */
     snprintf(cmd, sizeof(cmd),
-        "gh gist edit %s -f status.json=%s 2>/dev/null",
+        "gh gist edit %s --add %s 2>/dev/null",
         secret_gist_id, temp_file);
     
     if (system(cmd) == 0) {
@@ -476,9 +475,9 @@ int till_federate_admin_status(int full) {
         return -1;
     }
     
-    /* Fetch secret gist content */
+    /* Fetch secret gist content - skip first 2 lines (title and blank) */
     char cmd[512];
-    snprintf(cmd, sizeof(cmd), "gh gist view %s 2>/dev/null", config.secret_gist_id);
+    snprintf(cmd, sizeof(cmd), "gh gist view %s --filename status.json 2>/dev/null", config.secret_gist_id);
     
     FILE *fp = popen(cmd, "r");
     if (fp == NULL) {
