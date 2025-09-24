@@ -69,6 +69,8 @@
   till release [target]          # Remove holds
   till pull                      # Get federation updates
   till push                      # Share your config
+  till menu add <component> <repo> [version] [availability]  # Add to menu
+  till menu remove <component>   # Remove from menu
 
   Scheduling
 

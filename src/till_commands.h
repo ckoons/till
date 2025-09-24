@@ -2,6 +2,7 @@
 #define TILL_COMMANDS_H
 
 #include "till_install.h"
+#include "till_menu.h"
 
 /* Implemented Till commands */
 int cmd_sync(int argc, char **argv);

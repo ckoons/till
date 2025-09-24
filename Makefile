@@ -29,11 +29,11 @@ BIN_DIR = .
 TARGET = $(BIN_DIR)/till
 
 # Source files
-SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_hold.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_common_extra.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/till_commands.c $(SRC_DIR)/till_platform.c $(SRC_DIR)/till_platform_process.c $(SRC_DIR)/till_platform_schedule.c $(SRC_DIR)/till_security.c $(SRC_DIR)/till_validate.c $(SRC_DIR)/till_progress.c $(SRC_DIR)/till_federation.c $(SRC_DIR)/till_federation_gist.c $(SRC_DIR)/till_federation_admin.c $(SRC_DIR)/cJSON.c
-HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_hold.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/till_commands.h $(SRC_DIR)/till_platform.h $(SRC_DIR)/till_security.h $(SRC_DIR)/till_validate.h $(SRC_DIR)/till_progress.h $(SRC_DIR)/till_federation.h $(SRC_DIR)/cJSON.h
+SOURCES = $(SRC_DIR)/till.c $(SRC_DIR)/till_install.c $(SRC_DIR)/till_tekton.c $(SRC_DIR)/till_host.c $(SRC_DIR)/till_hold.c $(SRC_DIR)/till_schedule.c $(SRC_DIR)/till_run.c $(SRC_DIR)/till_common.c $(SRC_DIR)/till_common_extra.c $(SRC_DIR)/till_registry.c $(SRC_DIR)/till_commands.c $(SRC_DIR)/till_platform.c $(SRC_DIR)/till_platform_process.c $(SRC_DIR)/till_platform_schedule.c $(SRC_DIR)/till_security.c $(SRC_DIR)/till_validate.c $(SRC_DIR)/till_progress.c $(SRC_DIR)/till_federation.c $(SRC_DIR)/till_federation_gist.c $(SRC_DIR)/till_federation_admin.c $(SRC_DIR)/till_menu.c $(SRC_DIR)/cJSON.c
+HEADERS = $(SRC_DIR)/till_config.h $(SRC_DIR)/till_install.h $(SRC_DIR)/till_tekton.h $(SRC_DIR)/till_host.h $(SRC_DIR)/till_hold.h $(SRC_DIR)/till_schedule.h $(SRC_DIR)/till_run.h $(SRC_DIR)/till_common.h $(SRC_DIR)/till_registry.h $(SRC_DIR)/till_commands.h $(SRC_DIR)/till_platform.h $(SRC_DIR)/till_security.h $(SRC_DIR)/till_validate.h $(SRC_DIR)/till_progress.h $(SRC_DIR)/till_federation.h $(SRC_DIR)/till_menu.h $(SRC_DIR)/cJSON.h
 
 # Object files
-OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_hold.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_common_extra.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/till_commands.o $(BUILD_DIR)/till_platform.o $(BUILD_DIR)/till_platform_process.o $(BUILD_DIR)/till_platform_schedule.o $(BUILD_DIR)/till_security.o $(BUILD_DIR)/till_validate.o $(BUILD_DIR)/till_progress.o $(BUILD_DIR)/till_federation.o $(BUILD_DIR)/till_federation_gist.o $(BUILD_DIR)/till_federation_admin.o $(BUILD_DIR)/cJSON.o
+OBJECTS = $(BUILD_DIR)/till.o $(BUILD_DIR)/till_install.o $(BUILD_DIR)/till_tekton.o $(BUILD_DIR)/till_host.o $(BUILD_DIR)/till_hold.o $(BUILD_DIR)/till_schedule.o $(BUILD_DIR)/till_run.o $(BUILD_DIR)/till_common.o $(BUILD_DIR)/till_common_extra.o $(BUILD_DIR)/till_registry.o $(BUILD_DIR)/till_commands.o $(BUILD_DIR)/till_platform.o $(BUILD_DIR)/till_platform_process.o $(BUILD_DIR)/till_platform_schedule.o $(BUILD_DIR)/till_security.o $(BUILD_DIR)/till_validate.o $(BUILD_DIR)/till_progress.o $(BUILD_DIR)/till_federation.o $(BUILD_DIR)/till_federation_gist.o $(BUILD_DIR)/till_federation_admin.o $(BUILD_DIR)/till_menu.o $(BUILD_DIR)/cJSON.o
 
 # Default target
 all: $(TARGET)
@@ -129,6 +129,10 @@ $(BUILD_DIR)/till_federation_gist.o: $(SRC_DIR)/till_federation_gist.c $(HEADERS
 $(BUILD_DIR)/till_federation_admin.o: $(SRC_DIR)/till_federation_admin.c $(HEADERS)
 	@echo "Compiling till_federation_admin.c..."
 	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_federation_admin.c -o $(BUILD_DIR)/till_federation_admin.o
+
+$(BUILD_DIR)/till_menu.o: $(SRC_DIR)/till_menu.c $(HEADERS)
+	@echo "Compiling till_menu.c..."
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/till_menu.c -o $(BUILD_DIR)/till_menu.o
 
 $(BUILD_DIR)/cJSON.o: $(SRC_DIR)/cJSON.c $(SRC_DIR)/cJSON.h
 	@echo "Compiling cJSON.c..."

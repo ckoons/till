@@ -798,6 +798,25 @@ int cmd_help(int argc, char *argv[]) {
         else if (strcmp(topic, "watch") == 0) {
             return cmd_watch(2, (char*[]){"watch", "--help", NULL});
         }
+        else if (strcmp(topic, "menu") == 0) {
+            printf("Till Menu - Manage menu of the day components\n\n");
+            printf("Usage: till menu <add|remove> ...\n\n");
+            printf("Subcommands:\n");
+            printf("  add <component> <repo> [version] [availability]\n");
+            printf("    Add or replace a component in the menu catalog\n");
+            printf("    - component: Component name (e.g., Tekton, Numa)\n");
+            printf("    - repo: Git repository URL\n");
+            printf("    - version: Version tag (default: v1.0.0)\n");
+            printf("    - availability: Trust levels (default: all optional)\n\n");
+            printf("  remove <component>\n");
+            printf("    Remove a component from the menu catalog\n\n");
+            printf("Examples:\n");
+            printf("  till menu add Tekton https://github.com/user/Tekton.git\n");
+            printf("  till menu add Numa https://github.com/org/numa.git v2.1.0\n");
+            printf("  till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 solo=optional,named=standard\n");
+            printf("  till menu remove Tekton\n");
+            return 0;
+        }
         else {
             printf("No help available for '%s'\n\n", topic);
         }
@@ -820,6 +839,7 @@ int cmd_help(int argc, char *argv[]) {
     printf("  release             Allow component updates\n");
     printf("  host                Manage remote hosts\n");
     printf("  federate            Manage federation\n");
+    printf("  menu                Manage menu of the day catalog\n");
     printf("  status              Show Till status\n");
     printf("  run                 Run component command\n");
     printf("  update              Update Till from git\n");

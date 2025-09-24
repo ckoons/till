@@ -333,6 +333,52 @@ Examples:
 till release numa       # Allow numa updates
 ```
 
+## Menu Commands
+
+### till menu add
+
+Add a component to the menu of the day catalog.
+
+```bash
+till menu add <component> <repo> [version] [availability]
+```
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `component` | Component name | Required |
+| `repo` | Git repository URL | Required |
+| `version` | Component version | v1.0.0 |
+| `availability` | Trust levels and types | solo=optional,named=optional,trusted=standard |
+
+Availability format: `level=type,level=type,...`
+- Levels: `solo`, `named`, `trusted`
+- Types: `optional`, `standard`
+
+Examples:
+```bash
+till menu add Tekton https://github.com/user/Tekton.git
+till menu add Numa https://github.com/org/numa.git v2.1.0
+till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 solo=optional,named=standard,trusted=standard
+```
+
+### till menu remove
+
+Remove a component from the menu of the day catalog.
+
+```bash
+till menu remove <component>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `component` | Component name to remove |
+
+Examples:
+```bash
+till menu remove Tekton
+till menu remove Numa
+```
+
 ## Federation Commands
 
 ### till federate init
