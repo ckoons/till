@@ -146,8 +146,8 @@ int main(int argc, char *argv[]) {
             /* Special case for 'run' command - needs argc-2, argv+2 */
             result = cmd->handler(argc - 2, argv + 2);
         } else {
-            /* Standard command - pass argc-1, argv+1 */
-            result = cmd->handler(argc - 1, argv + 1);
+            /* Standard command - pass argc-2, argv+2 to skip program name and command */
+            result = cmd->handler(argc - 2, argv + 2);
         }
     } else {
         till_error("Unknown command '%s'", argv[1]);

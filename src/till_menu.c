@@ -108,7 +108,7 @@ static cJSON* parse_availability(const char *avail_str) {
     }
 
     /* Skip "availability:" prefix if present */
-    if (strncmp(avail_str, "availability:", 13) == 0) {
+    if (strncasecmp(avail_str, "availability:", 13) == 0) {
         avail_str += 13;
     }
 
@@ -154,17 +154,44 @@ static cJSON* parse_availability(const char *avail_str) {
 
 /* Add or replace component in menu */
 int cmd_menu_add(int argc, char **argv) {
-    if (argc < 3) {
-        till_error("Usage: till menu add <component> <repo> [version] [availability]");
-        till_info("  Example: till menu add Tekton https://github.com/user/Tekton.git v1.0.0 solo=optional,named=standard,trusted=standard");
+    if (argc < 2) {
+        till_error("Usage: till menu add <component> <repo> [version] [availability] [description]");
+        till_info("  Example: till menu add Tekton https://github.com/user/Tekton.git v1.0.0 solo=optional,named=standard \"Description here\"");
         till_info("  Note: If component exists, it will be replaced with new values");
         return 1;
     }
 
     const char *component_name = argv[0];
     const char *repo_url = argv[1];
-    const char *version = (argc > 2) ? argv[2] : "v1.0.0";
-    const char *availability = (argc > 3) ? argv[3] : NULL;
+    const char *version = "v1.0.0";
+    const char *availability = NULL;
+    const char *description = "";
+
+    /* Parse optional arguments */
+    int arg_idx = 2;
+
+    /* Check for version (starts with 'v' or is a number) */
+    if (argc > arg_idx && argv[arg_idx][0] == 'v') {
+        version = argv[arg_idx];
+        arg_idx++;
+    }
+
+    /* Check for availability (contains '=' or starts with 'availability:') */
+    if (argc > arg_idx && strchr(argv[arg_idx], '=') != NULL) {
+        /* Check for common misspellings */
+        if (strncasecmp(argv[arg_idx], "availabil", 9) == 0 &&
+            strncasecmp(argv[arg_idx], "availability:", 13) != 0) {
+            till_error("Misspelled 'availability:' - please use correct spelling");
+            return 1;
+        }
+        availability = argv[arg_idx];
+        arg_idx++;
+    }
+
+    /* Remaining argument is description */
+    if (argc > arg_idx) {
+        description = argv[arg_idx];
+    }
 
     /* Validate component name - basic check for reasonable names */
     if (strlen(component_name) == 0 || strlen(component_name) > 64) {
@@ -214,7 +241,7 @@ int cmd_menu_add(int argc, char **argv) {
     cJSON *component = cJSON_CreateObject();
     cJSON_AddStringToObject(component, "repo", repo_url);
     cJSON_AddStringToObject(component, "version", version);
-    cJSON_AddStringToObject(component, "description", "");
+    cJSON_AddStringToObject(component, "description", description);
 
     /* Add availability */
     cJSON *avail = parse_availability(availability);
@@ -239,6 +266,9 @@ int cmd_menu_add(int argc, char **argv) {
     till_info("  Version: %s", version);
     if (availability) {
         till_info("  Availability: %s", availability);
+    }
+    if (description && *description) {
+        till_info("  Description: %s", description);
     }
 
     cJSON_Delete(menu);
@@ -299,7 +329,7 @@ int cmd_menu_remove(int argc, char **argv) {
 int cmd_menu(int argc, char **argv) {
     if (argc < 1) {
         till_error("Usage: till menu <add|remove> ...");
-        till_info("  till menu add <component> <repo> [version] [availability]");
+        till_info("  till menu add <component> <repo> [version] [availability] [description]");
         till_info("  till menu remove <component>");
         return 1;
     }

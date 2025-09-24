@@ -802,12 +802,13 @@ int cmd_help(int argc, char *argv[]) {
             printf("Till Menu - Manage menu of the day components\n\n");
             printf("Usage: till menu <add|remove> ...\n\n");
             printf("Subcommands:\n");
-            printf("  add <component> <repo> [version] [availability]\n");
+            printf("  add <component> <repo> [version] [availability] [description]\n");
             printf("    Add or replace a component in the menu catalog\n");
             printf("    - component: Component name (e.g., Tekton, Numa)\n");
             printf("    - repo: Git repository URL\n");
             printf("    - version: Version tag (default: v1.0.0)\n");
-            printf("    - availability: Trust levels (default: all optional)\n\n");
+            printf("    - availability: Trust levels (default: all optional)\n");
+            printf("    - description: Optional description string\n\n");
             printf("  remove <component>\n");
             printf("    Remove a component from the menu catalog\n\n");
             printf("Examples:\n");
