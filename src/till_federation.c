@@ -83,21 +83,33 @@ int load_federation_config(federation_config_t *config) {
         return -1;
     }
     
-    /* Load configuration fields */
+    /* Load configuration fields - check both old and new field names for compatibility */
     const char *site_id = json_get_string(json, "site_id", "");
     const char *gist_id = json_get_string(json, "gist_id", "");
     const char *token = json_get_string(json, "github_token_encrypted", "");
-    const char *trust = json_get_string(json, "trust_level", TRUST_ANONYMOUS);
+
+    /* Check both federation_mode (new) and trust_level (old) */
+    const char *trust = json_get_string(json, "federation_mode", NULL);
+    if (!trust) {
+        trust = json_get_string(json, "trust_level", TRUST_ANONYMOUS);
+    }
+
     const char *last_menu = json_get_string(json, "last_menu_date", "");
-    
+
     strncpy(config->site_id, site_id, sizeof(config->site_id) - 1);
     strncpy(config->gist_id, gist_id, sizeof(config->gist_id) - 1);
     strncpy(config->github_token, token, sizeof(config->github_token) - 1);
     strncpy(config->trust_level, trust, sizeof(config->trust_level) - 1);
     strncpy(config->last_menu_date, last_menu, sizeof(config->last_menu_date) - 1);
-    
+
     config->last_sync = (time_t)json_get_int(json, "last_sync", 0);
-    config->auto_sync = json_get_bool(json, "auto_sync", 0);
+
+    /* Check both sync_enabled (new) and auto_sync (old) */
+    if (cJSON_HasObjectItem(json, "sync_enabled")) {
+        config->auto_sync = json_get_bool(json, "sync_enabled", 0);
+    } else {
+        config->auto_sync = json_get_bool(json, "auto_sync", 0);
+    }
     
     cJSON_Delete(json);
     return 0;

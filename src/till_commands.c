@@ -181,6 +181,7 @@ int cmd_sync(int argc, char *argv[]) {
     /* Process menu_of_the_day.json if federation is enabled */
     if (!dry_run && file_exists(MENU_PATH)) {
         printf("\nProcessing menu of the day...\n");
+        till_log(LOG_INFO, "Processing menu_of_the_day.json for auto-installation check");
 
         /* Load federation config to get mode */
         federation_config_t fed_config = {0};
@@ -199,10 +200,25 @@ int cmd_sync(int argc, char *argv[]) {
 
                     cJSON *menu = cJSON_Parse(content);
                     if (menu) {
+                        /* Load existing installations */
+                        cJSON *registry = load_till_json("tekton/till-private.json");
+                        cJSON *installations = NULL;
+                        if (registry) {
+                            installations = cJSON_GetObjectItem(registry, "installations");
+                        }
+
                         cJSON *containers = cJSON_GetObjectItem(menu, "containers");
-                        if (containers) {
-                            cJSON *container;
-                            cJSON_ArrayForEach(container, containers) {
+                        if (containers && cJSON_IsObject(containers)) {
+                            int count = 0;
+                            cJSON *container = containers->child;
+                            while (container) {
+                                count++;
+                                container = container->next;
+                            }
+                            printf("  Checking %d components...\n", count);
+
+                            container = containers->child;
+                            while (container) {
                                 const char *comp_name = container->string;
                                 const char *repo = json_get_string(container, "repo", NULL);
                                 cJSON *availability = cJSON_GetObjectItem(container, "availability");
@@ -225,9 +241,95 @@ int cmd_sync(int argc, char *argv[]) {
                                                 }
                                             }
                                         } else {
-                                            /* Install new */
-                                            printf("  Installing %s (standard)...\n", comp_name);
-                                            /* TODO: Implement auto-install from menu */
+                                            /* Check if local directory exists */
+                                            char install_path[TILL_MAX_PATH];
+                                            const char *home = getenv("HOME");
+                                            if (home) {
+                                                snprintf(install_path, sizeof(install_path),
+                                                        "%s/%s/%s", home, TILL_PROJECTS_BASE, comp_name);
+
+                                                /* Only install if directory doesn't exist */
+                                                if (!dir_exists(install_path)) {
+                                                    printf("  Installing new standard component %s to %s...\n", comp_name, install_path);
+                                                    till_log(LOG_INFO, "Auto-installing new standard component: %s", comp_name);
+                                                    till_log(LOG_INFO, "  Repository: %s", repo);
+                                                    till_log(LOG_INFO, "  Target path: %s", install_path);
+                                                    till_log(LOG_INFO, "  Federation mode: %s", fed_config.trust_level);
+
+                                                    /* Setup install options */
+                                                    install_options_t opts = {0};
+                                                    strncpy(opts.path, install_path, sizeof(opts.path) - 1);
+                                                    strncpy(opts.mode, fed_config.trust_level, sizeof(opts.mode) - 1);
+
+                                                    /* Generate FQN based on component name */
+                                                    if (strcasecmp(comp_name, "Tekton") == 0) {
+                                                        /* Determine if primary or coder-X */
+                                                        cJSON *existing_tekton = NULL;
+                                                        int coder_count = 0;
+                                                        cJSON *inst;
+                                                        cJSON_ArrayForEach(inst, installations) {
+                                                            if (strstr(inst->string, "tekton")) {
+                                                                if (strstr(inst->string, "primary")) {
+                                                                    existing_tekton = inst;
+                                                                } else if (strstr(inst->string, "coder-")) {
+                                                                    coder_count++;
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if (!existing_tekton) {
+                                                            strcpy(opts.name, "primary.tekton.development.us");
+                                                            opts.port_base = 8000;
+                                                            opts.ai_port_base = 45000;
+                                                        } else {
+                                                            /* Create coder-X installation */
+                                                            char coder_letter = 'a' + coder_count;
+                                                            snprintf(opts.name, sizeof(opts.name),
+                                                                    "coder-%c.tekton.development.us", coder_letter);
+                                                            opts.port_base = 8100 + (coder_count * 100);
+                                                            opts.ai_port_base = 45100 + (coder_count * 100);
+                                                        }
+
+                                                        /* Get primary Tekton path if available */
+                                                        char primary_path[TILL_MAX_PATH];
+                                                        if (get_primary_tekton_path(primary_path, sizeof(primary_path)) == 0) {
+                                                            strncpy(opts.tekton_main_root, primary_path, sizeof(opts.tekton_main_root) - 1);
+                                                        }
+
+                                                        /* Clone from repo URL in menu */
+                                                        printf("  Cloning from %s...\n", repo);
+                                                        till_log(LOG_INFO, "Cloning Tekton repository from %s", repo);
+                                                        if (run_command_logged("git clone \"%s\" \"%s\"", repo, install_path) == 0) {
+                                                            /* Register the installation */
+                                                            if (till_install_tekton(&opts) == 0) {
+                                                                printf("  ✓ Successfully installed %s\n", comp_name);
+                                                                till_log(LOG_INFO, "Successfully auto-installed new standard component: %s at %s", comp_name, install_path);
+                                                            } else {
+                                                                printf("  ✗ Failed to complete %s installation\n", comp_name);
+                                                                till_log(LOG_ERROR, "Failed to complete auto-installation of %s (registration failed)", comp_name);
+                                                            }
+                                                        } else {
+                                                            printf("  ✗ Failed to clone %s repository\n", comp_name);
+                                                            till_log(LOG_ERROR, "Failed to clone repository for auto-installation of %s from %s", comp_name, repo);
+                                                        }
+                                                    } else {
+                                                        /* Generic component install */
+                                                        printf("  Cloning %s from %s...\n", comp_name, repo);
+                                                        till_log(LOG_INFO, "Cloning component %s from %s", comp_name, repo);
+                                                        if (run_command_logged("git clone \"%s\" \"%s\"", repo, install_path) == 0) {
+                                                            printf("  ✓ Successfully installed %s\n", comp_name);
+                                                            till_log(LOG_INFO, "Successfully auto-installed new standard component: %s at %s", comp_name, install_path);
+                                                            /* TODO: Register non-Tekton components */
+                                                        } else {
+                                                            printf("  ✗ Failed to clone %s\n", comp_name);
+                                                            till_log(LOG_ERROR, "Failed to clone repository for auto-installation of %s from %s", comp_name, repo);
+                                                        }
+                                                    }
+                                                } else {
+                                                    printf("  Skipping %s - directory already exists at %s\n", comp_name, install_path);
+                                                    till_log(LOG_DEBUG, "Skipping auto-install of %s - directory already exists at %s", comp_name, install_path);
+                                                }
+                                            }
                                         }
                                     } else if (strcmp(avail_mode, "optional") == 0 && existing) {
                                         /* Update only if already installed */
@@ -240,9 +342,13 @@ int cmd_sync(int argc, char *argv[]) {
                                         }
                                     }
                                 }
+                                container = container->next;
                             }
                         }
                         cJSON_Delete(menu);
+                        if (registry) {
+                            cJSON_Delete(registry);
+                        }
                     }
                     free(content);
                 }
