@@ -220,6 +220,18 @@ install: $(TARGET) man check-prereqs setup-github
 	else \
 		echo "Using existing hosts-local.json"; \
 	fi
+	@# Create default federation.json if it doesn't exist
+	@if [ ! -f .till/federation.json ]; then \
+		echo "Creating default federation.json..."; \
+		HOSTNAME=$$(hostname); \
+		HEX_TIME=$$(printf "%lx" $$(date +%s)); \
+		SITE_ID="$$HOSTNAME.$$HEX_TIME.till"; \
+		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' | python3 -m json.tool > .till/federation.json 2>/dev/null || \
+		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' > .till/federation.json; \
+		echo "Created federation config with site_id: $$SITE_ID"; \
+	else \
+		echo "Using existing federation.json"; \
+	fi
 	@echo ""
 	@echo "========================================="
 	@echo "✓ Till installation complete!"
@@ -229,8 +241,8 @@ install: $(TARGET) man check-prereqs setup-github
 	@echo ""
 	@if gh auth status >/dev/null 2>&1; then \
 		echo "Federation Quick Start:"; \
-		echo "  till federate join --named    # Join with GitHub identity"; \
 		echo "  till federate status          # Check federation status"; \
+		echo "  till federate join named      # Join as named member"; \
 	else \
 		echo "To enable federation features:"; \
 		echo "  1. gh auth login -s gist     # Authenticate GitHub CLI"; \

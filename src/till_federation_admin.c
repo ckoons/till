@@ -598,21 +598,32 @@ int till_federate_admin(int argc, char *argv[]) {
         printf("===========================================\n\n");
         printf("Usage: till federate admin <command> [options]\n\n");
         printf("Commands:\n");
+        printf("  menu       Manage menu of the day\n");
         printf("  process    Process all federation gists and delete them\n");
         printf("  status     Show aggregated status from secret gist\n\n");
+        printf("Menu Commands:\n");
+        printf("  menu add <component> <availability>    Add component to menu\n");
+        printf("  menu remove <component>                Remove from menu\n");
+        printf("  menu show                              Show current menu\n\n");
         printf("Options:\n");
         printf("  --stats    Show statistics only (default)\n");
         printf("  --full     Show full site details\n\n");
         printf("Examples:\n");
+        printf("  till federate admin menu add Tekton \"anonymous=standard,named=standard\"\n");
+        printf("  till federate admin menu show\n");
         printf("  till federate admin process\n");
-        printf("  till federate admin status\n");
         printf("  till federate admin status --full\n");
         return 0;
     }
     
     const char *subcmd = argv[2];
-    
-    if (strcmp(subcmd, "process") == 0) {
+
+    if (strcmp(subcmd, "menu") == 0) {
+        /* Pass to menu handler, adjusting argc/argv */
+        extern int cmd_menu(int argc, char **argv);
+        return cmd_menu(argc - 2, argv + 2);
+    }
+    else if (strcmp(subcmd, "process") == 0) {
         return till_federate_admin_process();
     }
     else if (strcmp(subcmd, "status") == 0) {

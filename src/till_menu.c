@@ -20,9 +20,6 @@
 #include "till_security.h"
 #include "cJSON.h"
 
-#define MENU_FILE "menu_of_the_day.json"
-#define MENU_BACKUP "menu_of_the_day.backup.json"
-
 /* Load the current menu from file */
 static cJSON* load_menu(const char *menu_path) {
     FILE *fp = fopen(menu_path, "r");
@@ -213,9 +210,9 @@ int cmd_menu_add(int argc, char **argv) {
         till_info("  Continuing anyway...");
     }
 
-    /* Get menu path - always use .till directory in current till installation */
+    /* Get menu path - use till/menu_of_the_day.json */
     char menu_path[TILL_MAX_PATH];
-    snprintf(menu_path, sizeof(menu_path), ".till/%s", MENU_FILE);
+    snprintf(menu_path, sizeof(menu_path), "%s", MENU_PATH);
 
     /* Load current menu */
     cJSON *menu = load_menu(menu_path);
@@ -284,9 +281,9 @@ int cmd_menu_remove(int argc, char **argv) {
 
     const char *component_name = argv[0];
 
-    /* Get menu path - always use .till directory in current till installation */
+    /* Get menu path - use till/menu_of_the_day.json */
     char menu_path[TILL_MAX_PATH];
-    snprintf(menu_path, sizeof(menu_path), ".till/%s", MENU_FILE);
+    snprintf(menu_path, sizeof(menu_path), "%s", MENU_PATH);
 
     /* Load current menu */
     cJSON *menu = load_menu(menu_path);

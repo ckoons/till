@@ -64,14 +64,13 @@ typedef struct {
 /* Main federation functions */
 int till_federate_join(const char *trust_level, const char *token);
 int till_federate_leave(int delete_gist);
-int till_federate_pull(void);
-int till_federate_push(void);
-int till_federate_sync(void);
 int till_federate_status(void);
+int till_federate_set(const char *key, const char *value);
 
 /* Configuration management */
 int load_federation_config(federation_config_t *config);
 int save_federation_config(const federation_config_t *config);
+int create_default_federation_config(void);
 int federation_is_joined(void);
 
 /* Menu processing */

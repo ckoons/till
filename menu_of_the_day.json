@@ -1,0 +1,16 @@
+{
+	"version":	"1.0.0",
+	"date":	"2025-09-24",
+	"containers":	{
+		"Tekton":	{
+			"repo":	"http://github.com/ckoons/Tekton.git",
+			"version":	"v0.1.0",
+			"description":	"Tekton is a multi-CI Engineering &  CI Cognition Research Platform",
+			"availability":	{
+				"anonymous":	"standard",
+				"named":	"standard",
+				"trusted":	"standard"
+			}
+		}
+	}
+}

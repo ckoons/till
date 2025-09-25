@@ -178,12 +178,79 @@ int cmd_sync(int argc, char *argv[]) {
         till_watch_record_sync(failed == 0, 0, updated, 0);
     }
     
-    /* Run federation sync if joined */
-    if (!dry_run && federation_is_joined()) {
-        printf("\nRunning federation sync...\n");
-        till_federate_sync();
+    /* Process menu_of_the_day.json if federation is enabled */
+    if (!dry_run && file_exists(MENU_PATH)) {
+        printf("\nProcessing menu of the day...\n");
+
+        /* Load federation config to get mode */
+        federation_config_t fed_config = {0};
+        if (load_federation_config(&fed_config) == 0 && fed_config.auto_sync) {
+            /* Load menu */
+            FILE *fp = fopen(MENU_PATH, "r");
+            if (fp) {
+                fseek(fp, 0, SEEK_END);
+                long size = ftell(fp);
+                fseek(fp, 0, SEEK_SET);
+
+                char *content = malloc(size + 1);
+                if (content) {
+                    fread(content, 1, size, fp);
+                    content[size] = '\0';
+
+                    cJSON *menu = cJSON_Parse(content);
+                    if (menu) {
+                        cJSON *containers = cJSON_GetObjectItem(menu, "containers");
+                        if (containers) {
+                            cJSON *container;
+                            cJSON_ArrayForEach(container, containers) {
+                                const char *comp_name = container->string;
+                                const char *repo = json_get_string(container, "repo", NULL);
+                                cJSON *availability = cJSON_GetObjectItem(container, "availability");
+
+                                if (comp_name && repo && availability) {
+                                    /* Check availability for our federation mode */
+                                    const char *avail_mode = json_get_string(availability, fed_config.trust_level, "");
+
+                                    /* Check if component is already installed */
+                                    cJSON *existing = cJSON_GetObjectItem(installations, comp_name);
+
+                                    if (strcmp(avail_mode, "standard") == 0) {
+                                        if (existing) {
+                                            /* Update existing */
+                                            if (!is_component_held(comp_name)) {
+                                                printf("  Updating %s (standard)...\n", comp_name);
+                                                const char *root = json_get_string(existing, "root", NULL);
+                                                if (root) {
+                                                    run_command_logged("cd \"%s\" && git pull", root);
+                                                }
+                                            }
+                                        } else {
+                                            /* Install new */
+                                            printf("  Installing %s (standard)...\n", comp_name);
+                                            /* TODO: Implement auto-install from menu */
+                                        }
+                                    } else if (strcmp(avail_mode, "optional") == 0 && existing) {
+                                        /* Update only if already installed */
+                                        if (!is_component_held(comp_name)) {
+                                            printf("  Updating %s (optional)...\n", comp_name);
+                                            const char *root = json_get_string(existing, "root", NULL);
+                                            if (root) {
+                                                run_command_logged("cd \"%s\" && git pull", root);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        cJSON_Delete(menu);
+                    }
+                    free(content);
+                }
+                fclose(fp);
+            }
+        }
     }
-    
+
     return failed > 0 ? 1 : 0;
 }
 

@@ -130,8 +130,104 @@ int save_federation_config(const federation_config_t *config) {
     
     int result = save_json_file(path, json);
     cJSON_Delete(json);
-    
+
     return result;
+}
+
+/* Create default federation configuration */
+int create_default_federation_config(void) {
+    federation_config_t config = {0};
+
+    /* Generate unique site ID: hostname.timestamp_hex.till */
+    char hostname[256] = {0};
+    if (gethostname(hostname, sizeof(hostname) - 1) != 0) {
+        strcpy(hostname, "unknown");
+    }
+
+    /* Convert timestamp to hex */
+    time_t now = time(NULL);
+    char hex_time[32];
+    snprintf(hex_time, sizeof(hex_time), "%lx", (unsigned long)now);
+
+    /* Create site_id */
+    snprintf(config.site_id, sizeof(config.site_id), "%s.%s.till", hostname, hex_time);
+
+    /* Set defaults */
+    strcpy(config.trust_level, TILL_DEFAULT_MODE);  /* anonymous */
+    config.auto_sync = 1;  /* sync enabled by default */
+    config.last_sync = 0;
+    strcpy(config.gist_id, "");
+    strcpy(config.github_token, "");
+    strcpy(config.last_menu_date, "");
+
+    /* Save the configuration */
+    if (save_federation_config(&config) != 0) {
+        till_error("Failed to create default federation config");
+        return -1;
+    }
+
+    till_log(LOG_INFO, "Created default federation config: %s", config.site_id);
+    return 0;
+}
+
+/* Set a federation configuration value */
+int till_federate_set(const char *key, const char *value) {
+    if (!key || !value) {
+        till_error("Key and value are required");
+        return -1;
+    }
+
+    federation_config_t config = {0};
+
+    /* Load existing config or create default */
+    if (load_federation_config(&config) != 0) {
+        /* Config doesn't exist, create default first */
+        if (create_default_federation_config() != 0) {
+            return -1;
+        }
+        if (load_federation_config(&config) != 0) {
+            till_error("Failed to load federation config after creation");
+            return -1;
+        }
+    }
+
+    /* Update the specified field */
+    if (strcmp(key, "site_id") == 0) {
+        strncpy(config.site_id, value, sizeof(config.site_id) - 1);
+    } else if (strcmp(key, "federation_mode") == 0) {
+        if (strcmp(value, "anonymous") != 0 &&
+            strcmp(value, "named") != 0 &&
+            strcmp(value, "trusted") != 0) {
+            till_error("Invalid federation_mode. Must be: anonymous, named, or trusted");
+            return -1;
+        }
+        strncpy(config.trust_level, value, sizeof(config.trust_level) - 1);
+    } else if (strcmp(key, "sync_enabled") == 0) {
+        if (strcmp(value, "true") == 0 || strcmp(value, "1") == 0) {
+            config.auto_sync = 1;
+        } else if (strcmp(value, "false") == 0 || strcmp(value, "0") == 0) {
+            config.auto_sync = 0;
+        } else {
+            till_error("sync_enabled must be true or false");
+            return -1;
+        }
+    } else if (strcmp(key, "menu_version") == 0) {
+        /* Allow setting menu version for testing */
+        strncpy(config.last_menu_date, value, sizeof(config.last_menu_date) - 1);
+    } else {
+        till_error("Unknown key: %s", key);
+        till_error("Valid keys: site_id, federation_mode, sync_enabled, menu_version");
+        return -1;
+    }
+
+    /* Save updated config */
+    if (save_federation_config(&config) != 0) {
+        till_error("Failed to save federation config");
+        return -1;
+    }
+
+    printf("Set %s = %s\n", key, value);
+    return 0;
 }
 
 /* Simple token encryption (XOR with key for now - should use proper encryption) */
@@ -720,7 +816,7 @@ int till_federate_sync(void) {
 
 /* Main federate command handler */
 int cmd_federate(int argc, char *argv[]) {
-    if (argc < 2) {
+    if (argc < 1) {
         printf("Till Federation Commands\n");
         printf("========================\n\n");
         printf("Usage: till federate <command> [options]\n\n");
@@ -728,26 +824,25 @@ int cmd_federate(int argc, char *argv[]) {
         printf("  join      Join the federation at specified trust level\n");
         printf("  leave     Leave the federation\n");
         printf("  status    Show current federation status\n");
-        printf("  pull      Pull updates from federation (menu-of-the-day)\n");
-        printf("  push      Push status to federation gist\n");
-        printf("  sync      Synchronize with federation (pull + push)\n");
+        printf("  set       Set federation configuration values\n");
         printf("  admin     Admin commands (owner only)\n");
         printf("  help      Show detailed help message\n\n");
         printf("Quick Examples:\n");
-        printf("  till federate join --anonymous\n");
+        printf("  till federate join anonymous\n");
         printf("  till federate status\n");
+        printf("  till federate set site_id mysite.abc123.till\n");
         printf("\nUse 'till federate help' for more details\n");
         return 0;
     }
     
-    const char *subcmd = argv[1];
+    const char *subcmd = argv[0];
     
     if (strcmp(subcmd, "join") == 0) {
         const char *trust_level = TRUST_NAMED;  /* Default */
         const char *token = NULL;
         
         /* Parse options */
-        for (int i = 2; i < argc; i++) {
+        for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--anonymous") == 0) {
                 trust_level = TRUST_ANONYMOUS;
             } else if (strcmp(argv[i], "--named") == 0) {
@@ -763,7 +858,7 @@ int cmd_federate(int argc, char *argv[]) {
     }
     else if (strcmp(subcmd, "leave") == 0) {
         int delete_gist = 0;
-        for (int i = 2; i < argc; i++) {
+        for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--delete-gist") == 0) {
                 delete_gist = 1;
             }
@@ -773,14 +868,18 @@ int cmd_federate(int argc, char *argv[]) {
     else if (strcmp(subcmd, "status") == 0) {
         return till_federate_status();
     }
-    else if (strcmp(subcmd, "pull") == 0) {
-        return till_federate_pull();
-    }
-    else if (strcmp(subcmd, "push") == 0) {
-        return till_federate_push();
-    }
-    else if (strcmp(subcmd, "sync") == 0) {
-        return till_federate_sync();
+    else if (strcmp(subcmd, "set") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Error: 'set' requires key and value\n");
+            fprintf(stderr, "Usage: till federate set <key> <value>\n");
+            fprintf(stderr, "\nValid keys:\n");
+            fprintf(stderr, "  site_id         - Your unique site identifier\n");
+            fprintf(stderr, "  federation_mode - anonymous, named, or trusted\n");
+            fprintf(stderr, "  sync_enabled    - true or false\n");
+            fprintf(stderr, "\nExample: till federate set site_id mysite.abc123.till\n");
+            return -1;
+        }
+        return till_federate_set(argv[1], argv[2]);
     }
     else if (strcmp(subcmd, "admin") == 0) {
         return till_federate_admin(argc, argv);
@@ -794,21 +893,22 @@ int cmd_federate(int argc, char *argv[]) {
         printf("  join      Join the federation at specified trust level\n");
         printf("  leave     Leave the federation\n");
         printf("  status    Show current federation status\n");
-        printf("  pull      Pull updates from federation (menu-of-the-day)\n");
-        printf("  push      Push status to federation gist\n");
-        printf("  sync      Synchronize with federation (pull + push)\n");
+        printf("  set       Set federation configuration values\n");
+        printf("  admin     Admin commands (menu management)\n");
         printf("  help      Show this help message\n\n");
         printf("Join Options:\n");
-        printf("  --anonymous       Join as anonymous (read-only, no identity)\n");
-        printf("  --named          Join as named member (requires GitHub token)\n");
-        printf("  --trusted        Join as trusted member (full telemetry)\n");
-        printf("  --token <token>  Provide GitHub personal access token\n\n");
-        printf("Leave Options:\n");
-        printf("  --delete-gist    Delete the GitHub gist when leaving\n\n");
+        printf("  anonymous         Join as anonymous (read-only)\n");
+        printf("  named            Join as named member\n");
+        printf("  trusted          Join as trusted member\n\n");
+        printf("Set Options:\n");
+        printf("  site_id <id>     Set your unique site identifier\n");
+        printf("  federation_mode  Set mode: anonymous, named, or trusted\n");
+        printf("  sync_enabled     Set to true or false\n\n");
         printf("Examples:\n");
-        printf("  till federate join --anonymous\n");
-        printf("  till federate join --named --token ghp_xxxx\n");
+        printf("  till federate join anonymous\n");
         printf("  till federate status\n");
+        printf("  till federate set site_id mysite.abc123.till\n");
+        printf("  till federate set federation_mode named\n");
         printf("  till federate leave\n");
         return 0;
     }
@@ -827,7 +927,7 @@ int cmd_federate(int argc, char *argv[]) {
             }
         } else {
             fprintf(stderr, "Error: Unknown federate command: %s\n", subcmd);
-            fprintf(stderr, "\nAvailable commands: join, leave, status, pull, push, sync, help\n");
+            fprintf(stderr, "\nAvailable commands: join, leave, status, set, admin, help\n");
             fprintf(stderr, "Use 'till federate help' for usage information\n");
         }
         fflush(stderr);

@@ -32,6 +32,12 @@
 #define TILL_PRIVATE_CONFIG "till-private.json"
 #define TILL_PRIVATE_BACKUP "till-private.json.bak"
 #define TILL_HOSTS_CONFIG "till-hosts.json"
+#define TILL_FEDERATION_CONFIG "federation.json"
+
+/* Menu Files */
+#define MENU_FILE "menu_of_the_day.json"
+#define MENU_PATH "till/" MENU_FILE  /* till/menu_of_the_day.json */
+#define MENU_BACKUP "menu_of_the_day.backup.json"
 
 /* Federation Configuration */
 #define TILL_DEFAULT_MODE "anonymous"
