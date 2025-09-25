@@ -1,6 +1,6 @@
 {
 	"version":	"1.0.0",
-	"date":	"2025-09-24",
+	"date":	"2025-09-25",
 	"containers":	{
 		"Tekton":	{
 			"repo":	"http://github.com/ckoons/Tekton.git",
@@ -10,6 +10,16 @@
 				"anonymous":	"standard",
 				"named":	"standard",
 				"trusted":	"standard"
+			}
+		},
+		"TestComponent":	{
+			"repo":	"https://github.com/test/repo.git",
+			"version":	"v1.0.0",
+			"description":	"",
+			"availability":	{
+				"anonymous":	"optional",
+				"named":	"optional",
+				"trusted":	"optional"
 			}
 		}
 	}

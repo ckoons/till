@@ -36,7 +36,7 @@
 
 /* Menu Files */
 #define MENU_FILE "menu_of_the_day.json"
-#define MENU_PATH "till/" MENU_FILE  /* till/menu_of_the_day.json */
+#define MENU_PATH MENU_FILE  /* menu_of_the_day.json in current directory */
 #define MENU_BACKUP "menu_of_the_day.backup.json"
 
 /* Federation Configuration */

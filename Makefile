@@ -220,14 +220,15 @@ install: $(TARGET) man check-prereqs setup-github
 	else \
 		echo "Using existing hosts-local.json"; \
 	fi
-	@# Create default federation.json if it doesn't exist
-	@if [ ! -f .till/federation.json ]; then \
+	@# Create default federation.json in global ~/.till if it doesn't exist
+	@mkdir -p $(HOME)/.till
+	@if [ ! -f $(HOME)/.till/federation.json ]; then \
 		echo "Creating default federation.json..."; \
 		HOSTNAME=$$(hostname); \
 		HEX_TIME=$$(printf "%lx" $$(date +%s)); \
 		SITE_ID="$$HOSTNAME.$$HEX_TIME.till"; \
-		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' | python3 -m json.tool > .till/federation.json 2>/dev/null || \
-		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' > .till/federation.json; \
+		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' | python3 -m json.tool > $(HOME)/.till/federation.json 2>/dev/null || \
+		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' > $(HOME)/.till/federation.json; \
 		echo "Created federation config with site_id: $$SITE_ID"; \
 	else \
 		echo "Using existing federation.json"; \

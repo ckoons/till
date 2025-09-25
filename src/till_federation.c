@@ -825,12 +825,13 @@ int cmd_federate(int argc, char *argv[]) {
         printf("  leave     Leave the federation\n");
         printf("  status    Show current federation status\n");
         printf("  set       Set federation configuration values\n");
-        printf("  admin     Admin commands (owner only)\n");
+        printf("  menu      Manage menu of the day\n");
         printf("  help      Show detailed help message\n\n");
         printf("Quick Examples:\n");
         printf("  till federate join anonymous\n");
         printf("  till federate status\n");
         printf("  till federate set site_id mysite.abc123.till\n");
+        printf("  till federate menu add Tekton https://github.com/user/Tekton.git\n");
         printf("\nUse 'till federate help' for more details\n");
         return 0;
     }
@@ -881,8 +882,10 @@ int cmd_federate(int argc, char *argv[]) {
         }
         return till_federate_set(argv[1], argv[2]);
     }
-    else if (strcmp(subcmd, "admin") == 0) {
-        return till_federate_admin(argc, argv);
+    else if (strcmp(subcmd, "menu") == 0) {
+        /* Handle menu commands directly */
+        extern int cmd_menu(int argc, char **argv);
+        return cmd_menu(argc - 1, argv + 1);
     }
     else if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "help") == 0) {
         // Show help
@@ -894,7 +897,7 @@ int cmd_federate(int argc, char *argv[]) {
         printf("  leave     Leave the federation\n");
         printf("  status    Show current federation status\n");
         printf("  set       Set federation configuration values\n");
-        printf("  admin     Admin commands (menu management)\n");
+        printf("  menu      Manage menu of the day\n");
         printf("  help      Show this help message\n\n");
         printf("Join Options:\n");
         printf("  anonymous         Join as anonymous (read-only)\n");
@@ -927,7 +930,7 @@ int cmd_federate(int argc, char *argv[]) {
             }
         } else {
             fprintf(stderr, "Error: Unknown federate command: %s\n", subcmd);
-            fprintf(stderr, "\nAvailable commands: join, leave, status, set, admin, help\n");
+            fprintf(stderr, "\nAvailable commands: join, leave, status, set, menu, help\n");
             fprintf(stderr, "Use 'till federate help' for usage information\n");
         }
         fflush(stderr);
