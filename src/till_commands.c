@@ -814,7 +814,7 @@ int cmd_help(int argc, char *argv[]) {
             printf("Examples:\n");
             printf("  till menu add Tekton https://github.com/user/Tekton.git\n");
             printf("  till menu add Numa https://github.com/org/numa.git v2.1.0\n");
-            printf("  till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 solo=optional,named=standard\n");
+            printf("  till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 anonymous=optional,named=standard\n");
             printf("  till menu remove Tekton\n");
             return 0;
         }

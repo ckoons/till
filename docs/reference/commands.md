@@ -348,17 +348,17 @@ till menu add <component> <repo> [version] [availability]
 | `component` | Component name | Required |
 | `repo` | Git repository URL | Required |
 | `version` | Component version | v1.0.0 |
-| `availability` | Trust levels and types | solo=optional,named=optional,trusted=standard |
+| `availability` | Trust levels and types | anonymous=optional,named=optional,trusted=standard |
 
 Availability format: `level=type,level=type,...`
-- Levels: `solo`, `named`, `trusted`
+- Levels: `anonymous`, `named`, `trusted`
 - Types: `optional`, `standard`
 
 Examples:
 ```bash
 till menu add Tekton https://github.com/user/Tekton.git
 till menu add Numa https://github.com/org/numa.git v2.1.0
-till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 solo=optional,named=standard,trusted=standard
+till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 anonymous=optional,named=standard,trusted=standard
 ```
 
 ### till menu remove

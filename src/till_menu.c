@@ -95,13 +95,13 @@ static int save_menu(const char *menu_path, cJSON *menu) {
     return 0;
 }
 
-/* Parse availability string like "solo=optional,named=standard,trusted=standard" */
+/* Parse availability string like "anonymous=optional,named=standard,trusted=standard" */
 static cJSON* parse_availability(const char *avail_str) {
     cJSON *availability = cJSON_CreateObject();
 
     if (!avail_str || !*avail_str) {
         /* Default availability - all optional */
-        cJSON_AddStringToObject(availability, "solo", "optional");
+        cJSON_AddStringToObject(availability, "anonymous", "optional");
         cJSON_AddStringToObject(availability, "named", "optional");
         cJSON_AddStringToObject(availability, "trusted", "optional");
         return availability;
@@ -123,7 +123,7 @@ static cJSON* parse_availability(const char *avail_str) {
             char *type = equals + 1;
 
             /* Validate level and type */
-            if ((strcmp(level, "solo") == 0 ||
+            if ((strcmp(level, "anonymous") == 0 ||
                  strcmp(level, "named") == 0 ||
                  strcmp(level, "trusted") == 0) &&
                 (strcmp(type, "optional") == 0 ||
@@ -139,8 +139,8 @@ static cJSON* parse_availability(const char *avail_str) {
     free(work_str);
 
     /* Ensure all levels have values */
-    if (!cJSON_GetObjectItem(availability, "solo")) {
-        cJSON_AddStringToObject(availability, "solo", "optional");
+    if (!cJSON_GetObjectItem(availability, "anonymous")) {
+        cJSON_AddStringToObject(availability, "anonymous", "optional");
     }
     if (!cJSON_GetObjectItem(availability, "named")) {
         cJSON_AddStringToObject(availability, "named", "optional");
@@ -156,7 +156,7 @@ static cJSON* parse_availability(const char *avail_str) {
 int cmd_menu_add(int argc, char **argv) {
     if (argc < 2) {
         till_error("Usage: till menu add <component> <repo> [version] [availability] [description]");
-        till_info("  Example: till menu add Tekton https://github.com/user/Tekton.git v1.0.0 solo=optional,named=standard \"Description here\"");
+        till_info("  Example: till menu add Tekton https://github.com/user/Tekton.git v1.0.0 anonymous=optional,named=standard \"Description here\"");
         till_info("  Note: If component exists, it will be replaced with new values");
         return 1;
     }
