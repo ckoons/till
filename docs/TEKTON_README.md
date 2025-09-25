@@ -24,12 +24,10 @@ cd till
 # Build
 make
 
-# Install system-wide (requires sudo)
-sudo make install
-
-# OR install for current user only
-make install-user
-# Add to PATH: export PATH="$HOME/.local/bin:$PATH"
+# Install (tries system-wide first, falls back to user install)
+make install
+# If installed to ~/.local/bin, add to PATH:
+# export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## Quick Start
@@ -41,9 +39,9 @@ make install-user
 till status
 
 # Install a new Tekton instance
-till install --mode anonymous
+till install tekton --mode anonymous
 # OR interactive mode
-till install -i
+till install tekton -i
 ```
 
 ### Daily Usage
@@ -69,7 +67,7 @@ till run tekton stop
 ### Installation Management
 
 ```bash
-till install [options]        # Install new Tekton instance
+till install tekton [options]  # Install new Tekton instance
   --mode MODE                # anonymous, named, trusted, coder-[a-c]
   --name NAME                # Registry name (FQN format)
   --path PATH                # Installation directory
@@ -86,6 +84,21 @@ till sync --dry-run         # Check for updates without pulling
 till                        # Dry run (same as above)
 ```
 
+#### How Sync Works with Federation
+
+When `till sync` runs, it performs these steps:
+
+1. **Updates Till itself** (unless `--skip-till-update`)
+2. **Updates all registered Tekton installations** via git pull
+3. **Processes menu_of_the_day.json** if federation is enabled:
+   - Reads your federation_mode from `~/.till/federation.json`
+   - For each component in the menu:
+     - If availability is "standard" for your mode → install or update
+     - If availability is "optional" for your mode → update only if already installed
+     - Components on HOLD are always skipped
+
+Example: If you're in "anonymous" mode and Tekton has `"anonymous": "standard"`, it will be auto-installed/updated. If a component has `"anonymous": "optional"`, it will only update if you manually installed it first.
+
 ### Scheduling
 
 ```bash
@@ -97,6 +110,61 @@ till watch --disable        # Disable scheduled sync
 ```
 
 See [SCHEDULE.md](SCHEDULE.md) for detailed scheduling documentation.
+
+### Federation Management
+
+Federation enables Till installations to participate in a distributed network, sharing configurations and updates through a menu-of-the-day system.
+
+#### Quick Start
+
+```bash
+# After installation, you're automatically in anonymous mode
+till federate status            # Check your current status
+
+# Customize your identity
+till federate set site_id myorg.team1.till
+
+# Manage components via menu
+till federate menu add MyApp https://github.com/myorg/app.git
+```
+
+#### Federation Commands
+
+```bash
+# Join federation (anonymous by default)
+till federate join anonymous    # Read-only participation
+till federate join named        # Standard membership (requires GitHub token)
+till federate join trusted      # Full participation with telemetry
+
+# Check federation status
+till federate status
+
+# Configure federation settings
+till federate set site_id mysite.abc123.till
+till federate set federation_mode named
+till federate set sync_enabled true
+
+# Manage menu of the day (defines available components)
+till federate menu add <component> <repo_url> [version] [availability] [description]
+till federate menu remove <component>
+
+# Examples
+till federate menu add Tekton https://github.com/user/Tekton.git
+till federate menu add MyApp https://github.com/org/app.git v2.0.0 "anonymous=optional,named=standard"
+
+# Leave federation
+till federate leave
+```
+
+#### Federation Modes
+
+- **anonymous**: Read-only access to federation resources. Default mode for privacy.
+- **named**: Standard federation membership with identity. Requires GitHub authentication.
+- **trusted**: Full participation including telemetry sharing (for federation admins).
+
+#### Site ID
+
+Your site ID uniquely identifies your Till installation in the federation. By default, it's generated as `hostname.hextime.till` (e.g., `M4.68d593ec.till`). You can customize it using `till federate set site_id`.
 
 ### Host Federation
 
@@ -156,11 +224,14 @@ till release <component>
 
 ## Configuration
 
-Till stores its configuration in `~/.till/`:
+Till uses two configuration locations:
+
+### Global Configuration (`~/.till/`)
 
 ```
 ~/.till/
 ├── config/           # Till configuration
+├── federation.json   # Federation membership config
 ├── tekton/          # Tekton registry
 │   └── till-private.json
 ├── hosts/           # Host federation data
@@ -171,7 +242,64 @@ Till stores its configuration in `~/.till/`:
 └── schedule.json    # Sync schedule
 ```
 
-### Registry Format (till-private.json)
+### Project Configuration (Till directory)
+
+```
+./                           # Till project directory
+├── menu_of_the_day.json   # Component availability definitions
+└── .till/                  # Local Till data
+    └── hosts-local.json    # Local host configuration
+```
+
+## Configuration Files
+
+### Federation Configuration (`~/.till/federation.json`)
+
+Created automatically during `make install`. Stores your federation membership details:
+
+```json
+{
+  "federation_mode": "anonymous",
+  "site_id": "M4.68d593ec.till",
+  "joined_date": null,
+  "last_sync": null,
+  "sync_enabled": true,
+  "menu_version": null,
+  "menu_last_processed": null
+}
+```
+
+### Menu of the Day (`menu_of_the_day.json`)
+
+Defines available components and their deployment rules:
+
+```json
+{
+  "version": "1.0.0",
+  "date": "2025-09-25",
+  "containers": {
+    "Tekton": {
+      "repo": "https://github.com/user/Tekton.git",
+      "version": "v1.0.0",
+      "description": "Multi-CI Engineering Platform",
+      "availability": {
+        "anonymous": "optional",
+        "named": "standard",
+        "trusted": "standard"
+      }
+    }
+  }
+}
+```
+
+#### Availability Modes
+
+- **standard**: Component will be automatically installed or updated during `till sync`
+- **optional**: Component will only be updated if already installed, never auto-installed
+
+The availability is checked against your federation_mode to determine the action.
+
+### Registry Format (`till-private.json`)
 
 ```json
 {
