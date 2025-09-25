@@ -234,6 +234,29 @@ install: $(TARGET) man check-prereqs setup-github
 		echo "Using existing federation.json"; \
 	fi
 	@echo ""
+	@echo "Checking dependencies..."
+	@if command -v git >/dev/null 2>&1; then \
+		echo "  ✓ git is installed"; \
+	else \
+		echo "  ✗ git is NOT installed (required)"; \
+		echo "    Install: https://git-scm.com"; \
+	fi
+	@if command -v gh >/dev/null 2>&1; then \
+		echo "  ✓ GitHub CLI (gh) is installed"; \
+		if gh auth status >/dev/null 2>&1; then \
+			echo "  ✓ GitHub CLI is authenticated"; \
+		else \
+			echo "  ⚠ GitHub CLI is not authenticated"; \
+			echo "    Run: gh auth login -s gist"; \
+		fi \
+	else \
+		echo "  ✗ GitHub CLI (gh) is NOT installed"; \
+		echo "    Required for named/trusted federation modes"; \
+		echo "    Install: https://cli.github.com"; \
+		echo "    macOS:  brew install gh"; \
+		echo "    Linux:  See https://github.com/cli/cli#installation"; \
+	fi
+	@echo ""
 	@echo "========================================="
 	@echo "✓ Till installation complete!"
 	@echo "========================================="
@@ -246,8 +269,9 @@ install: $(TARGET) man check-prereqs setup-github
 		echo "  till federate join named      # Join as named member"; \
 	else \
 		echo "To enable federation features:"; \
-		echo "  1. gh auth login -s gist     # Authenticate GitHub CLI"; \
-		echo "  2. till federate join --named # Join federation"; \
+		echo "  1. Install gh if not installed"; \
+		echo "  2. gh auth login -s gist       # Authenticate GitHub CLI"; \
+		echo "  3. till federate join named    # Join federation"; \
 	fi
 	@echo ""
 	@echo "For help: till --help"

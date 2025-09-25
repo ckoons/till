@@ -86,7 +86,6 @@ int load_federation_config(federation_config_t *config) {
     /* Load configuration fields - check both old and new field names for compatibility */
     const char *site_id = json_get_string(json, "site_id", "");
     const char *gist_id = json_get_string(json, "gist_id", "");
-    const char *token = json_get_string(json, "github_token_encrypted", "");
 
     /* Check both federation_mode (new) and trust_level (old) */
     const char *trust = json_get_string(json, "federation_mode", NULL);
@@ -98,7 +97,6 @@ int load_federation_config(federation_config_t *config) {
 
     strncpy(config->site_id, site_id, sizeof(config->site_id) - 1);
     strncpy(config->gist_id, gist_id, sizeof(config->gist_id) - 1);
-    strncpy(config->github_token, token, sizeof(config->github_token) - 1);
     strncpy(config->trust_level, trust, sizeof(config->trust_level) - 1);
     strncpy(config->last_menu_date, last_menu, sizeof(config->last_menu_date) - 1);
 
@@ -134,7 +132,6 @@ int save_federation_config(const federation_config_t *config) {
     
     cJSON_AddStringToObject(json, "site_id", config->site_id);
     cJSON_AddStringToObject(json, "gist_id", config->gist_id);
-    cJSON_AddStringToObject(json, "github_token_encrypted", config->github_token);
     cJSON_AddStringToObject(json, "trust_level", config->trust_level);
     cJSON_AddNumberToObject(json, "last_sync", (double)config->last_sync);
     cJSON_AddBoolToObject(json, "auto_sync", config->auto_sync);
@@ -169,7 +166,6 @@ int create_default_federation_config(void) {
     config.auto_sync = 1;  /* sync enabled by default */
     config.last_sync = 0;
     strcpy(config.gist_id, "");
-    strcpy(config.github_token, "");
     strcpy(config.last_menu_date, "");
 
     /* Save the configuration */
@@ -242,173 +238,97 @@ int till_federate_set(const char *key, const char *value) {
     return 0;
 }
 
-/* Simple token encryption (XOR with key for now - should use proper encryption) */
-int encrypt_token(const char *plain, char *encrypted, size_t size) {
-    if (!plain || !encrypted) return -1;
-    
-    const char *key = "TillFederationKey2025";  /* Should use better key management */
-    size_t key_len = strlen(key);
-    size_t plain_len = strlen(plain);
-    
-    /* Simple XOR encryption - replace with proper encryption */
-    for (size_t i = 0; i < plain_len && i < size - 1; i++) {
-        encrypted[i] = plain[i] ^ key[i % key_len];
-    }
-    encrypted[plain_len] = '\0';
-    
-    /* Base64 encode the result for storage */
-    /* TODO: Implement proper base64 encoding */
-    
-    return 0;
-}
-
-/* Decrypt token */
-int decrypt_token(const char *encrypted, char *plain, size_t size) {
-    if (!encrypted || !plain) return -1;
-    
-    /* TODO: Base64 decode first */
-    
-    const char *key = "TillFederationKey2025";
-    size_t key_len = strlen(key);
-    size_t enc_len = strlen(encrypted);
-    
-    /* XOR decryption (same as encryption for XOR) */
-    for (size_t i = 0; i < enc_len && i < size - 1; i++) {
-        plain[i] = encrypted[i] ^ key[i % key_len];
-    }
-    plain[enc_len] = '\0';
-    
-    return 0;
-}
-
-/* Get token from gh CLI */
-static int get_gh_token(char *token, size_t size) {
-    FILE *fp;
-    char buffer[256];
-    
-    /* Check if gh is authenticated */
-    fp = popen("gh auth status >/dev/null 2>&1 && echo 'ok'", "r");
-    if (fp == NULL) {
-        return -1;
-    }
-    
-    if (fgets(buffer, sizeof(buffer), fp) == NULL || strncmp(buffer, "ok", 2) != 0) {
-        pclose(fp);
-        return -1;
-    }
-    pclose(fp);
-    
-    /* Get the token */
-    fp = popen("gh auth token 2>/dev/null", "r");
-    if (fp == NULL) {
-        return -1;
-    }
-    
-    if (fgets(token, size, fp) != NULL) {
-        /* Remove newline */
-        size_t len = strlen(token);
-        if (len > 0 && token[len-1] == '\n') {
-            token[len-1] = '\0';
-        }
-        pclose(fp);
-        
-        /* Validate token has some length */
-        if (strlen(token) > 10) {
-            return 0;
-        }
-    }
-    
-    pclose(fp);
-    return -1;
-}
-
 /* Check if gh has required scope */
 static int check_gh_scope(const char *scope) {
     FILE *fp;
     char buffer[1024];
-    
+
     /* Get token scopes via API */
     fp = popen("gh api user -i 2>/dev/null | grep 'X-OAuth-Scopes:'", "r");
     if (fp == NULL) {
         return 0;  /* Assume no scope if can't check */
     }
-    
+
     if (fgets(buffer, sizeof(buffer), fp) != NULL) {
         pclose(fp);
         return (strstr(buffer, scope) != NULL) ? 1 : 0;
     }
-    
+
     pclose(fp);
     return 0;
 }
 
-/* Setup gh authentication if needed */
-static int setup_gh_auth(void) {
-    char buffer[256];
+/* Get GitHub token from gh CLI - the only way we get tokens now */
+int get_github_token(char *token, size_t size) {
     FILE *fp;
-    
-    /* Check if gh is available */
+    char buffer[256];
+
+    /* First check if gh is installed */
     fp = popen("command -v gh >/dev/null 2>&1 && echo 'ok'", "r");
     if (fp == NULL) {
+        printf("Error: Failed to check for GitHub CLI\n");
         return -1;
     }
-    
+
     if (fgets(buffer, sizeof(buffer), fp) == NULL || strncmp(buffer, "ok", 2) != 0) {
         pclose(fp);
-        printf("Error: GitHub CLI (gh) is required but not found.\n");
-        printf("Please install: https://cli.github.com/\n");
+        printf("Error: GitHub CLI (gh) is not installed.\n");
+        printf("Please install from: https://cli.github.com\n");
+        printf("  macOS:  brew install gh\n");
+        printf("  Linux:  See https://github.com/cli/cli#installation\n");
         return -1;
     }
     pclose(fp);
-    
-    /* Check if authenticated */
+
+    /* Check if gh is authenticated */
     fp = popen("gh auth status >/dev/null 2>&1 && echo 'ok'", "r");
     if (fp == NULL) {
+        printf("Error: Failed to check GitHub authentication\n");
         return -1;
     }
-    
+
     if (fgets(buffer, sizeof(buffer), fp) == NULL || strncmp(buffer, "ok", 2) != 0) {
         pclose(fp);
-        printf("GitHub authentication required.\n");
+        printf("Error: GitHub CLI is not authenticated.\n");
         printf("Please run: gh auth login -s gist\n");
-        printf("Then try again.\n");
         return -1;
     }
     pclose(fp);
-    
-    /* Check for gist scope */
-    if (!check_gh_scope("gist")) {
-        printf("GitHub token missing 'gist' scope.\n");
-        printf("Please run: gh auth refresh -s gist\n");
-        printf("Then try again.\n");
+
+    /* Get the token */
+    fp = popen("gh auth token 2>/dev/null", "r");
+    if (fp == NULL) {
+        printf("Error: Failed to retrieve GitHub token\n");
         return -1;
     }
-    
-    return 0;
+
+    if (fgets(token, size, fp) != NULL) {
+        /* Remove newline */
+        token[strcspn(token, "\n")] = '\0';
+        pclose(fp);
+
+        /* Validate token has some length */
+        if (strlen(token) > 10) {
+            /* Check for gist scope */
+            if (!check_gh_scope("gist")) {
+                printf("Warning: GitHub token may not have 'gist' scope\n");
+                printf("To add scope run: gh auth refresh -s gist\n");
+            }
+            return 0;
+        }
+    }
+
+    pclose(fp);
+    printf("Error: Failed to get valid GitHub token\n");
+    printf("Please run: gh auth refresh -s gist\n");
+    return -1;
 }
 
-/* Prompt for GitHub token */
-int prompt_for_token(char *token, size_t size) {
-    printf("Enter GitHub Personal Access Token (with gist scope): ");
-    fflush(stdout);
-    
-    /* Disable echo for password input */
-    system("stty -echo");
-    
-    if (fgets(token, size, stdin) == NULL) {
-        system("stty echo");
-        printf("\n");
-        return -1;
-    }
-    
-    system("stty echo");
-    printf("\n");
-    
-    /* Remove newline */
-    char *newline = strchr(token, '\n');
-    if (newline) *newline = '\0';
-    
-    return strlen(token) > 0 ? 0 : -1;
+/* Check if gh is properly setup (installed and authenticated) */
+static int check_gh_setup(void) {
+    char token[256];
+    /* This will print appropriate error messages */
+    return get_github_token(token, sizeof(token));
 }
 
 /* Generate unique site ID */
@@ -459,37 +379,37 @@ static int create_manifest_json(char *json_out, size_t size, const federation_co
 }
 
 /* Join the federation */
-int till_federate_join(const char *trust_level, const char *token_arg) {
+int till_federate_join(const char *trust_level) {
     federation_config_t config = {0};
     char token[256] = {0};
-    
+
     /* Check if already joined */
     if (federation_is_joined()) {
         till_error("Already joined to federation. Use 'till federate leave' first.");
         return -1;
     }
-    
+
     /* Validate trust level */
     if (!trust_level) {
         trust_level = TRUST_NAMED;  /* Default */
     }
-    
+
     if (strcmp(trust_level, TRUST_ANONYMOUS) != 0 &&
         strcmp(trust_level, TRUST_NAMED) != 0 &&
         strcmp(trust_level, TRUST_TRUSTED) != 0) {
         till_error("Invalid trust level. Use: anonymous, named, or trusted");
         return -1;
     }
-    
+
     /* Anonymous doesn't need token or gist */
     if (strcmp(trust_level, TRUST_ANONYMOUS) == 0) {
         printf("Joining federation as anonymous (read-only)...\n");
-        
+
         generate_site_id(config.site_id, sizeof(config.site_id));
         strcpy(config.trust_level, TRUST_ANONYMOUS);
         config.auto_sync = 1;
         config.last_sync = 0;
-        
+
         if (save_federation_config(&config) == 0) {
             printf("✓ Joined federation as anonymous\n");
             printf("  Site ID: %s\n", config.site_id);
@@ -500,78 +420,33 @@ int till_federate_join(const char *trust_level, const char *token_arg) {
             return -1;
         }
     }
-    
-    /* Named and Trusted need GitHub token */
-    if (token_arg && strlen(token_arg) > 0) {
-        /* Token provided on command line */
-        strncpy(token, token_arg, sizeof(token) - 1);
-    } else {
-        /* Try to get token from gh CLI first */
-        if (get_gh_token(token, sizeof(token)) == 0) {
-            printf("Using GitHub token from gh CLI\n");
-            
-            /* Verify scope */
-            if (!check_gh_scope("gist")) {
-                printf("Warning: Token may not have 'gist' scope\n");
-                printf("To add scope, run: gh auth refresh -s gist\n");
-            }
-        } else {
-            /* gh not available or not authenticated */
-            if (setup_gh_auth() != 0) {
-                /* Setup failed, try manual token */
-                if (!isatty(STDIN_FILENO)) {
-                    till_error("GitHub authentication required");
-                    printf("Please run: gh auth login -s gist\n");
-                    printf("Or use: till federate join --%s --token <token>\n", trust_level);
-                    return -1;
-                }
-                
-                printf("\nAlternatively, you can provide a token manually.\n");
-                printf("Create a token at: https://github.com/settings/tokens\n");
-                printf("Required scope: gist\n\n");
-                
-                if (prompt_for_token(token, sizeof(token)) != 0) {
-                    till_error("Failed to get GitHub token");
-                    return -1;
-                }
-            } else {
-                /* Try again after setup */
-                if (get_gh_token(token, sizeof(token)) != 0) {
-                    till_error("Failed to get token after setup");
-                    return -1;
-                }
-                printf("Using GitHub token from gh CLI\n");
-            }
-        }
+
+    /* Named and Trusted need GitHub authentication via gh CLI */
+    printf("Checking GitHub authentication...\n");
+    if (get_github_token(token, sizeof(token)) != 0) {
+        /* Error messages already printed by get_github_token */
+        return -1;
     }
-    
+
     printf("Joining federation as %s...\n", trust_level);
-    
+
     /* Generate site ID */
     generate_site_id(config.site_id, sizeof(config.site_id));
     strcpy(config.trust_level, trust_level);
     config.auto_sync = 1;
     config.last_sync = 0;
-    
-    /* Encrypt and store token */
-    if (encrypt_token(token, config.github_token, sizeof(config.github_token)) != 0) {
-        till_error("Failed to encrypt token");
-        return -1;
-    }
-    
+
     /* Create gist if not anonymous */
-    if (strcmp(trust_level, TRUST_ANONYMOUS) != 0) {
-        printf("Creating GitHub Gist...\n");
-        
-        /* Create the gist */
-        if (create_federation_gist(token, config.site_id, config.gist_id, sizeof(config.gist_id)) == 0) {
-            printf("  Created gist: %s\n", config.gist_id);
-        } else {
-            fprintf(stderr, "Warning: Failed to create gist. You can retry with 'till federate push'\n");
-            /* Don't fail join - user can retry push later */
-        }
+    printf("Creating GitHub Gist...\n");
+
+    /* Create the gist - pass token directly now */
+    if (create_federation_gist(config.site_id, config.gist_id, sizeof(config.gist_id)) == 0) {
+        printf("  Created gist: %s\n", config.gist_id);
+    } else {
+        fprintf(stderr, "Warning: Failed to create gist. You can retry with 'till federate push'\n");
+        /* Don't fail join - user can retry push later */
     }
-    
+
     /* Save configuration */
     if (save_federation_config(&config) == 0) {
         printf("✓ Joined federation successfully\n");
@@ -603,27 +478,13 @@ int till_federate_leave(int delete_gist) {
     /* Delete gist if requested */
     if (delete_gist && strlen(config.gist_id) > 0) {
         printf("  Deleting gist: %s\n", config.gist_id);
-        
-        /* Get GitHub token */
-        char token[256];
-        if (get_gh_token(token, sizeof(token)) == 0) {
-            if (delete_federation_gist(token, config.gist_id) == 0) {
-                printf("  ✓ Gist deleted\n");
-            } else {
-                fprintf(stderr, "  Warning: Failed to delete gist\n");
-            }
+
+        /* Try to delete gist (will get token internally) */
+        if (delete_federation_gist(config.gist_id) == 0) {
+            printf("  ✓ Gist deleted\n");
         } else {
-            /* Try to decrypt stored token */
-            char plain_token[256];
-            if (decrypt_token(config.github_token, plain_token, sizeof(plain_token)) == 0) {
-                if (delete_federation_gist(plain_token, config.gist_id) == 0) {
-                    printf("  ✓ Gist deleted\n");
-                } else {
-                    fprintf(stderr, "  Warning: Failed to delete gist\n");
-                }
-            } else {
-                fprintf(stderr, "  Warning: No token available to delete gist\n");
-            }
+            fprintf(stderr, "  Warning: Failed to delete gist\n");
+            fprintf(stderr, "  You may need to manually delete: https://gist.github.com/%s\n", config.gist_id);
         }
     }
     
@@ -731,15 +592,12 @@ int till_federate_push(void) {
     }
     
     printf("Pushing status to federation...\n");
-    
-    /* Get GitHub token */
+
+    /* Check GitHub authentication */
     char token[256];
-    if (get_gh_token(token, sizeof(token)) != 0) {
-        /* Try to decrypt stored token */
-        if (decrypt_token(config.github_token, token, sizeof(token)) != 0) {
-            till_error("Failed to get GitHub token");
-            return -1;
-        }
+    if (get_github_token(token, sizeof(token)) != 0) {
+        /* Error messages already printed by get_github_token */
+        return -1;
     }
     
     /* Collect system status */
@@ -764,19 +622,19 @@ int till_federate_push(void) {
     if (strlen(config.gist_id) == 0) {
         /* Need to create gist */
         printf("  Creating GitHub gist...\n");
-        if (create_federation_gist(token, config.site_id, config.gist_id, sizeof(config.gist_id)) != 0) {
+        if (create_federation_gist(config.site_id, config.gist_id, sizeof(config.gist_id)) != 0) {
             till_error("Failed to create gist");
             return -1;
         }
         printf("  Created gist: %s\n", config.gist_id);
-        
+
         /* Save config with new gist ID */
         save_federation_config(&config);
     }
     
     /* Update gist with current status */
     printf("  Updating gist status...\n");
-    if (update_federation_gist(token, config.gist_id, json) != 0) {
+    if (update_federation_gist(config.gist_id, json) != 0) {
         till_error("Failed to update gist");
         return -1;
     }
@@ -852,8 +710,7 @@ int cmd_federate(int argc, char *argv[]) {
     
     if (strcmp(subcmd, "join") == 0) {
         const char *trust_level = TRUST_NAMED;  /* Default */
-        const char *token = NULL;
-        
+
         /* Parse options */
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--anonymous") == 0) {
@@ -862,12 +719,16 @@ int cmd_federate(int argc, char *argv[]) {
                 trust_level = TRUST_NAMED;
             } else if (strcmp(argv[i], "--trusted") == 0) {
                 trust_level = TRUST_TRUSTED;
-            } else if (strncmp(argv[i], "--token=", 8) == 0) {
-                token = argv[i] + 8;
+            } else if (strcmp(argv[i], "anonymous") == 0) {
+                trust_level = TRUST_ANONYMOUS;
+            } else if (strcmp(argv[i], "named") == 0) {
+                trust_level = TRUST_NAMED;
+            } else if (strcmp(argv[i], "trusted") == 0) {
+                trust_level = TRUST_TRUSTED;
             }
         }
-        
-        return till_federate_join(trust_level, token);
+
+        return till_federate_join(trust_level);
     }
     else if (strcmp(subcmd, "leave") == 0) {
         int delete_gist = 0;

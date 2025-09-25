@@ -22,7 +22,6 @@
 typedef struct {
     char site_id[128];           /* Unique site identifier */
     char gist_id[64];            /* GitHub Gist ID */
-    char github_token[256];      /* Encrypted GitHub token */
     char trust_level[32];        /* anonymous|named|trusted */
     time_t last_sync;            /* Last sync timestamp */
     int auto_sync;               /* Auto-sync enabled */
@@ -62,7 +61,7 @@ typedef struct {
 } manifest_t;
 
 /* Main federation functions */
-int till_federate_join(const char *trust_level, const char *token);
+int till_federate_join(const char *trust_level);
 int till_federate_leave(int delete_gist);
 int till_federate_status(void);
 int till_federate_set(const char *key, const char *value);
@@ -94,9 +93,9 @@ typedef struct {
 } federation_status_t;
 
 /* Gist management */
-int create_federation_gist(const char *token, const char *site_id, char *gist_id, size_t gist_id_size);
-int update_federation_gist(const char *token, const char *gist_id, const char *content);
-int delete_federation_gist(const char *token, const char *gist_id);
+int create_federation_gist(const char *site_id, char *gist_id, size_t gist_id_size);
+int update_federation_gist(const char *gist_id, const char *content);
+int delete_federation_gist(const char *gist_id);
 int fetch_federation_gist(const char *gist_id, char *content, size_t content_size);
 
 /* Status collection */
@@ -104,13 +103,11 @@ int collect_system_status(federation_status_t *status);
 int create_status_json(const federation_status_t *status, char *json, size_t json_size);
 
 /* GitHub API */
-int github_api_call(const char *method, const char *url, const char *token,
+int github_api_call(const char *method, const char *url,
                     const char *data, char *response, size_t response_size);
 
-/* Token management */
-int encrypt_token(const char *plain, char *encrypted, size_t size);
-int decrypt_token(const char *encrypted, char *plain, size_t size);
-int prompt_for_token(char *token, size_t size);
+/* Token management - simplified to just use gh CLI */
+int get_github_token(char *token, size_t size);
 
 /* Telemetry */
 int collect_telemetry(char *telemetry_json, size_t size);

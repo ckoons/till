@@ -12,7 +12,7 @@
 #include "cJSON.h"
 
 /* Create a new federation gist */
-int create_federation_gist(const char *token, const char *site_id, char *gist_id, size_t gist_id_size) {
+int create_federation_gist(const char *site_id, char *gist_id, size_t gist_id_size) {
     char cmd[4096];
     char status_json[2048];
     FILE *fp;
@@ -63,7 +63,7 @@ int create_federation_gist(const char *token, const char *site_id, char *gist_id
 }
 
 /* Update an existing federation gist */
-int update_federation_gist(const char *token, const char *gist_id, const char *content) {
+int update_federation_gist(const char *gist_id, const char *content) {
     char cmd[8192];
     FILE *fp;
     char escaped_content[4096];
@@ -103,7 +103,7 @@ int update_federation_gist(const char *token, const char *gist_id, const char *c
 }
 
 /* Delete a federation gist */
-int delete_federation_gist(const char *token, const char *gist_id) {
+int delete_federation_gist(const char *gist_id) {
     char cmd[512];
     FILE *fp;
     
