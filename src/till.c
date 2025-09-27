@@ -221,6 +221,21 @@ static int ensure_discovery(void) {
 
 /* Ensure Till directories exist */
 static int ensure_directories(void) {
+    char till_dir[TILL_MAX_PATH];
+
+    /* Get Till installation directory */
+    if (get_till_directory(till_dir, sizeof(till_dir)) != 0) {
+        till_error("Could not determine Till installation directory");
+        return -1;
+    }
+
+    /* Change to Till directory so relative paths work correctly */
+    if (chdir(till_dir) != 0) {
+        till_error("Could not change to Till directory: %s", till_dir);
+        return -1;
+    }
+
+    /* Now create directories relative to Till installation */
     const char *dirs[] = {
         TILL_HOME,
         TILL_CONFIG_DIR,
@@ -228,13 +243,13 @@ static int ensure_directories(void) {
         TILL_LOGS_DIR,
         NULL
     };
-    
+
     for (int i = 0; dirs[i] != NULL; i++) {
         if (create_directory(dirs[i]) != 0) {
             return -1;
         }
     }
-    
+
     return 0;
 }
 

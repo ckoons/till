@@ -17,36 +17,11 @@
 #include "till_common.h"
 #include "cJSON.h"
 
-/* Get global federation config path in user's home directory */
+/* Get federation config path in Till installation directory */
 static int get_federation_config_path(char *path, size_t size) {
-    const char *home = getenv("HOME");
-    if (!home) {
-        till_error("Cannot determine HOME directory");
-        return -1;
-    }
-    
-    snprintf(path, size, "%s/.till/federation.json", home);
-    return 0;
-}
-
-/* Ensure global till directory exists */
-static int ensure_global_till_dir(void) {
-    const char *home = getenv("HOME");
-    if (!home) {
-        return -1;
-    }
-    
-    char path[TILL_MAX_PATH];
-    snprintf(path, sizeof(path), "%s/.till", home);
-    
-    struct stat st;
-    if (stat(path, &st) == -1) {
-        if (mkdir(path, 0755) == -1) {
-            till_error("Cannot create global till directory: %s", strerror(errno));
-            return -1;
-        }
-    }
-    
+    /* Federation config is in .till/federation.json relative to Till installation */
+    /* Since ensure_directories() changes to Till installation dir, we use relative path */
+    snprintf(path, size, ".till/federation.json");
     return 0;
 }
 
@@ -116,11 +91,6 @@ int load_federation_config(federation_config_t *config) {
 /* Save federation configuration */
 int save_federation_config(const federation_config_t *config) {
     if (!config) return -1;
-    
-    /* Ensure global till directory exists */
-    if (ensure_global_till_dir() != 0) {
-        return -1;
-    }
     
     char path[TILL_MAX_PATH];
     if (get_federation_config_path(path, sizeof(path)) != 0) {
