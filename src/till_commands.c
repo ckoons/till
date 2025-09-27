@@ -758,17 +758,19 @@ int cmd_update(int argc, char *argv[]) {
     (void)argc;  /* Unused */
     (void)argv;  /* Unused */
     int behind = check_till_updates(1);
-    
+
     if (behind == 0) {
         printf("Till is up to date\n");
-        return 0;
+        /* Always run make install to ensure dependencies are installed */
+        printf("Ensuring dependencies are installed...\n");
+        return self_update_till();
     }
-    
+
     if (behind > 0) {
         printf("Till is %d commit%s behind\n", behind, behind == 1 ? "" : "s");
         return self_update_till();
     }
-    
+
     return 0;
 }
 
