@@ -763,7 +763,24 @@ int cmd_update(int argc, char *argv[]) {
         printf("Till is up to date\n");
         /* Always run make install to ensure dependencies are installed */
         printf("Ensuring dependencies are installed...\n");
-        return self_update_till();
+
+        char till_dir[TILL_MAX_PATH];
+        if (get_till_parent_dir(till_dir, sizeof(till_dir)) == 0) {
+            strcat(till_dir, "/till");
+
+            char cmd[TILL_MAX_PATH * 2];
+            snprintf(cmd, sizeof(cmd), "cd \"%s\" && make install 2>&1", till_dir);
+
+            printf("Running make install...\n");
+            if (system(cmd) == 0) {
+                printf("✓ Dependencies verified\n");
+                return 0;
+            } else {
+                printf("⚠ Warning: make install had issues\n");
+                return 1;
+            }
+        }
+        return 0;
     }
 
     if (behind > 0) {
