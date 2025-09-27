@@ -1,6 +1,5 @@
-#
 # till
-#
+ 
   Prepare your ground, plant your seeds, share your harvest.
 
   ## What is till?
