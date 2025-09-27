@@ -579,24 +579,30 @@ static void print_host_help(void) {
     printf("  add <name> <user>@<host>[:port]  Add a new host\n");
     printf("  test <name>                      Test SSH connectivity\n");
     printf("  setup <name>                     Install Till on remote host\n");
+    printf("  update [name]                    Update Till on host(s)\n");
+    printf("  sync [name]                      Sync Tekton installations on host(s)\n");
     printf("  exec <name> <command>            Execute command on remote\n");
     printf("  ssh <name> [args]                SSH to remote host\n");
     printf("  remove <name> [--clean-remote]   Remove a host\n");
     printf("  status [name]                    Show host(s) status\n");
-    printf("  sync                             Sync hosts across all machines\n");
     printf("  list                             List all hosts\n");
+    printf("\nCommands with optional [name]:\n");
+    printf("  - If name provided: operates on specific host\n");
+    printf("  - If name omitted: operates on all configured hosts\n");
     printf("\nExamples:\n");
     printf("  till host add m2 user@192.168.1.100\n");
-    printf("  till host test m2\n");
     printf("  till host setup m2\n");
+    printf("  till host update              # Update Till on all hosts\n");
+    printf("  till host update m2           # Update Till on specific host\n");
+    printf("  till host sync                # Sync all hosts\n");
+    printf("  till host sync m2             # Sync specific host\n");
     printf("  till host exec m2 'till status'\n");
-    printf("  till host ssh m2\n");
 }
 
-/* Sync hosts across all machines */
-int till_host_sync(void) {
-    printf("Syncing hosts across all machines...\n");
-    till_log(LOG_INFO, "Starting host sync");
+/* Update host configurations across all machines (internal function) */
+static int till_host_update_configs(void) {
+    printf("Updating host configurations...\n");
+    till_log(LOG_INFO, "Updating host configurations");
     
     /* Load local hosts file */
     cJSON *local_json = load_till_json("hosts-local.json");
@@ -893,14 +899,188 @@ int till_host_sync(void) {
     return hosts_failed > 0 ? 1 : 0;
 }
 
+/* Run a Till command on a specific remote host */
+static int run_till_on_host(const char *host_name, const char *till_cmd) {
+    /* Load hosts file */
+    cJSON *json = load_till_json("hosts-local.json");
+    if (!json) {
+        till_error("No hosts configured");
+        return -1;
+    }
+
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    if (!hosts) {
+        cJSON_Delete(json);
+        till_error("Invalid hosts file");
+        return -1;
+    }
+
+    /* Find the specific host */
+    cJSON *host = cJSON_GetObjectItem(hosts, host_name);
+    if (!host) {
+        cJSON_Delete(json);
+        till_error("Host '%s' not found", host_name);
+        return -1;
+    }
+
+    const char *user = json_get_string(host, "user", NULL);
+    const char *hostname = json_get_string(host, "host", NULL);
+    int port = json_get_int(host, "port", 22);
+
+    if (!user || !hostname) {
+        cJSON_Delete(json);
+        till_error("Invalid host configuration for '%s'", host_name);
+        return -1;
+    }
+
+    printf("Running 'till %s' on %s...\n", till_cmd, host_name);
+
+    /* Run the till command on remote host */
+    char output[8192];
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "till %s", till_cmd);
+
+    int result = run_ssh_command(user, hostname, port, cmd, output, sizeof(output));
+
+    /* Display output with host prefix */
+    if (strlen(output) > 0) {
+        char *line = strtok(output, "\n");
+        while (line) {
+            printf("  [%s] %s\n", host_name, line);
+            line = strtok(NULL, "\n");
+        }
+    }
+
+    if (result == 0) {
+        printf("  ✓ Command completed on %s\n", host_name);
+    } else {
+        printf("  ✗ Command failed on %s\n", host_name);
+    }
+
+    cJSON_Delete(json);
+    return result;
+}
+
+/* Run a Till command on all remote hosts */
+static int run_till_on_all_hosts(const char *till_cmd) {
+    /* Load hosts file */
+    cJSON *json = load_till_json("hosts-local.json");
+    if (!json) {
+        till_error("No hosts configured");
+        return -1;
+    }
+
+    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
+    if (!hosts) {
+        cJSON_Delete(json);
+        till_error("Invalid hosts file");
+        return -1;
+    }
+
+    int total_hosts = 0;
+    int successful = 0;
+    int failed = 0;
+
+    /* Iterate through all hosts */
+    cJSON *host;
+    cJSON_ArrayForEach(host, hosts) {
+        const char *host_name = host->string;
+
+        /* Skip local host */
+        if (strcmp(host_name, "local") == 0) {
+            continue;
+        }
+
+        const char *user = json_get_string(host, "user", NULL);
+        const char *hostname = json_get_string(host, "host", NULL);
+        int port = json_get_int(host, "port", 22);
+
+        if (!user || !hostname) {
+            printf("  ⚠ Skipping %s: invalid configuration\n", host_name);
+            continue;
+        }
+
+        total_hosts++;
+        printf("\n[%s] Running 'till %s'...\n", host_name, till_cmd);
+
+        /* Run the till command on remote host */
+        char output[8192];
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "till %s", till_cmd);
+
+        int result = run_ssh_command(user, hostname, port, cmd, output, sizeof(output));
+
+        /* Display output with host prefix */
+        if (strlen(output) > 0) {
+            char *line = strtok(output, "\n");
+            while (line) {
+                printf("  [%s] %s\n", host_name, line);
+                line = strtok(NULL, "\n");
+            }
+        }
+
+        if (result == 0) {
+            printf("  ✓ Completed on %s\n", host_name);
+            successful++;
+        } else {
+            printf("  ✗ Failed on %s\n", host_name);
+            failed++;
+        }
+    }
+
+    /* Summary */
+    printf("\n");
+    printf("=============================\n");
+    printf("Command: till %s\n", till_cmd);
+    printf("=============================\n");
+    printf("Total hosts: %d\n", total_hosts);
+    printf("Successful: %d\n", successful);
+    if (failed > 0) {
+        printf("Failed: %d\n", failed);
+    }
+
+    cJSON_Delete(json);
+    return failed > 0 ? 1 : 0;
+}
+
+/* Update Till on remote host(s) */
+int till_host_update(const char *host_name) {
+    if (host_name) {
+        /* Update specific host */
+        printf("Updating Till on host '%s'...\n", host_name);
+        till_log(LOG_INFO, "Updating Till on host: %s", host_name);
+        return run_till_on_host(host_name, "update");
+    } else {
+        /* Update all hosts */
+        printf("Updating Till on all hosts...\n");
+        till_log(LOG_INFO, "Updating Till on all hosts");
+        return run_till_on_all_hosts("update");
+    }
+}
+
+/* Sync Tekton installations on remote host(s) */
+int till_host_sync(const char *host_name) {
+    if (host_name) {
+        /* Sync specific host */
+        printf("Syncing host '%s'...\n", host_name);
+        till_log(LOG_INFO, "Syncing host: %s", host_name);
+        return run_till_on_host(host_name, "sync");
+    } else {
+        /* Sync all hosts */
+        printf("Syncing all hosts...\n");
+        till_log(LOG_INFO, "Syncing all hosts");
+        return run_till_on_all_hosts("sync");
+    }
+}
+
 /* Main host command handler */
 int till_host_command(int argc, char *argv[]) {
-    if (argc < 2) {
+    if (argc < 1) {
         print_host_help();
         return 0;
     }
-    
-    const char *subcmd = argv[1];
+
+    const char *subcmd = argv[0];
     
     /* Check for help flag */
     if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "-h") == 0) {
@@ -909,59 +1089,64 @@ int till_host_command(int argc, char *argv[]) {
     }
     
     if (strcmp(subcmd, "add") == 0) {
-        if (argc < 4) {
+        if (argc < 3) {
             till_error("Usage: till host add <name> <user>@<host>[:port]\n");
             return -1;
         }
-        return till_host_add(argv[2], argv[3]);
+        return till_host_add(argv[1], argv[2]);
     }
     else if (strcmp(subcmd, "test") == 0) {
-        if (argc < 3) {
+        if (argc < 2) {
             till_error("Usage: till host test <name>\n");
             return -1;
         }
-        return till_host_test(argv[2]);
+        return till_host_test(argv[1]);
     }
     else if (strcmp(subcmd, "setup") == 0) {
-        if (argc < 3) {
+        if (argc < 2) {
             till_error("Usage: till host setup <name>\n");
             return -1;
         }
-        return till_host_setup(argv[2]);
+        return till_host_setup(argv[1]);
     }
     else if (strcmp(subcmd, "exec") == 0) {
-        if (argc < 4) {
+        if (argc < 3) {
             till_error("Usage: till host exec <name> <command>\n");
             return -1;
         }
         /* Combine remaining arguments into command */
         char command[4096] = "";
-        for (int i = 3; i < argc; i++) {
-            if (i > 3) strcat(command, " ");
+        for (int i = 2; i < argc; i++) {
+            if (i > 2) strcat(command, " ");
             strcat(command, argv[i]);
         }
-        return till_host_exec(argv[2], command);
+        return till_host_exec(argv[1], command);
     }
     else if (strcmp(subcmd, "ssh") == 0) {
-        if (argc < 3) {
+        if (argc < 2) {
             till_error("Usage: till host ssh <name> [args]\n");
             return -1;
         }
-        return till_host_ssh(argv[2], argc - 3, argv + 3);
+        return till_host_ssh(argv[1], argc - 2, argv + 2);
     }
     else if (strcmp(subcmd, "remove") == 0) {
-        if (argc < 3) {
+        if (argc < 2) {
             till_error("Usage: till host remove <name> [--clean-remote]\n");
             return -1;
         }
-        int clean_remote = (argc > 3 && strcmp(argv[3], "--clean-remote") == 0);
-        return till_host_remove(argv[2], clean_remote);
+        int clean_remote = (argc > 2 && strcmp(argv[2], "--clean-remote") == 0);
+        return till_host_remove(argv[1], clean_remote);
     }
     else if (strcmp(subcmd, "status") == 0 || strcmp(subcmd, "list") == 0) {
-        return till_host_status(argc > 2 ? argv[2] : NULL);
+        return till_host_status(argc > 1 ? argv[1] : NULL);
+    }
+    else if (strcmp(subcmd, "update") == 0) {
+        const char *host_name = (argc > 1) ? argv[1] : NULL;
+        return till_host_update(host_name);
     }
     else if (strcmp(subcmd, "sync") == 0) {
-        return till_host_sync();
+        const char *host_name = (argc > 1) ? argv[1] : NULL;
+        return till_host_sync(host_name);
     }
     else {
         till_error("Unknown host subcommand: %s\n\n", subcmd);

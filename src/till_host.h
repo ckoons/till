@@ -26,8 +26,11 @@ int till_host_remove(const char *name, int clean_remote);
 /* Show host status */
 int till_host_status(const char *name);
 
-/* Sync hosts across all machines */
-int till_host_sync(void);
+/* Update Till on remote host(s) */
+int till_host_update(const char *host_name);
+
+/* Sync Tekton installations on remote host(s) */
+int till_host_sync(const char *host_name);
 
 /* Main host command handler */
 int till_host_command(int argc, char *argv[]);
