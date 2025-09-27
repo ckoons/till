@@ -185,19 +185,20 @@ check-prereqs:
 			fi; \
 		fi; \
 		if ! command -v git >/dev/null 2>&1; then \
-			echo "Error: git installation failed. Please install manually: https://git-scm.com/"; \
-			exit 1; \
+			echo "Warning: git installation failed. Please install manually: https://git-scm.com/"; \
 		fi; \
 	fi
 	@if ! command -v gh >/dev/null 2>&1; then \
 		echo "Warning: GitHub CLI (gh) is not installed. Attempting to install..."; \
 		if [ "$$(uname -s)" = "Darwin" ]; then \
-			if command -v brew >/dev/null 2>&1; then \
-				brew install gh || echo "Warning: Could not install gh automatically"; \
+			if command -v brew >/dev/null 2>&1 || [ -x /usr/local/bin/brew ] || [ -x /opt/homebrew/bin/brew ]; then \
+				echo "Using Homebrew to install gh..."; \
+				(command -v brew >/dev/null 2>&1 && brew install gh) || \
+				(/usr/local/bin/brew install gh 2>/dev/null) || \
+				(/opt/homebrew/bin/brew install gh 2>/dev/null) || \
+				echo "Warning: Could not install gh automatically"; \
 			else \
-				echo "Installing Homebrew first..."; \
-				/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
-				brew install gh || echo "Warning: Could not install gh automatically"; \
+				echo "Warning: Homebrew not found, skipping gh installation"; \
 			fi; \
 		elif [ "$$(uname -s)" = "Linux" ]; then \
 			if command -v apt-get >/dev/null 2>&1; then \
@@ -219,12 +220,13 @@ check-prereqs:
 		echo "✓ GitHub CLI (gh) already installed"; \
 	fi
 	@echo "✓ Prerequisites check complete"
+	@true  # Always succeed
 
 # Setup GitHub authentication
 .PHONY: setup-github
 setup-github:
 	@echo "Checking GitHub authentication..."
-	@if gh auth status >/dev/null 2>&1; then \
+	@if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then \
 		echo "✓ GitHub CLI authenticated"; \
 		if gh api user -i 2>/dev/null | grep -q "X-OAuth-Scopes:.*gist"; then \
 			echo "✓ Token has 'gist' scope for federation"; \
@@ -236,6 +238,7 @@ setup-github:
 		echo "ℹ️  GitHub CLI not authenticated (optional)"; \
 		echo "   For federation features, run: gh auth login -s gist"; \
 	fi
+	@true  # Always succeed
 
 install: $(TARGET) man check-prereqs setup-github
 	@if [ -w /usr/local/bin ]; then \
