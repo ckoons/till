@@ -241,106 +241,6 @@ int till_host_test(const char *name) {
     }
 }
 
-/* Setup Till on remote host */
-int till_host_setup(const char *name) {
-    if (!name) {
-        till_log(LOG_ERROR, "Usage: till host setup <name>");
-        return -1;
-    }
-    
-    /* Load hosts */
-    cJSON *json = load_till_json("hosts-local.json");
-    if (!json) {
-        till_log(LOG_ERROR, "No hosts configured");
-        till_error("No hosts configured\n");
-        return -1;
-    }
-    
-    cJSON *hosts = cJSON_GetObjectItem(json, "hosts");
-    cJSON *host = cJSON_GetObjectItem(hosts, name);
-    if (!host) {
-        till_log(LOG_ERROR, "Host '%s' not found", name);
-        till_error("Host '%s' not found\n", name);
-        cJSON_Delete(json);
-        return -1;
-    }
-    
-    const char *user = cJSON_GetStringValue(cJSON_GetObjectItem(host, "user"));
-    const char *hostname = cJSON_GetStringValue(cJSON_GetObjectItem(host, "host"));
-    int port = cJSON_GetNumberValue(cJSON_GetObjectItem(host, "port"));
-    if (!port) port = 22;
-    
-    printf("Setting up Till on '%s'...\n", name);
-    till_log(LOG_INFO, "Setting up Till on host '%s'", name);
-    
-    /* Check if Till already exists */
-    char output[1024];
-    if (run_ssh_command(user, hostname, port, 
-                       "test -d ~/" TILL_REMOTE_INSTALL_PATH " && echo EXISTS",
-                       output, sizeof(output)) == 0 && strstr(output, "EXISTS")) {
-        printf("✓ Till already installed on remote\n");
-        
-        /* Try to update it */
-        printf("Updating Till on remote...\n");
-        if (run_ssh_command(user, hostname, port,
-                           "cd ~/" TILL_REMOTE_INSTALL_PATH " && git pull && make clean && make",
-                           NULL, 0) == 0) {
-            printf("✓ Till updated successfully\n");
-            till_log(LOG_INFO, "Till updated on host '%s'", name);
-        } else {
-            printf("⚠ Warning: Till update failed (may have local changes)\n");
-            till_log(LOG_WARN, "Till update failed on host '%s'", name);
-        }
-    } else {
-        /* Install fresh */
-        printf("Installing Till on remote host...\n");
-        
-        char install_cmd[2048];
-        snprintf(install_cmd, sizeof(install_cmd),
-            "mkdir -p ~/%s && cd ~/%s && "
-            "git clone %s.git %s && "
-            "cd %s && make",
-            TILL_PROJECTS_BASE, TILL_PROJECTS_BASE, 
-            TILL_REPO_URL, TILL_GITHUB_REPO,
-            TILL_GITHUB_REPO);
-        
-        if (run_ssh_command(user, hostname, port, install_cmd, NULL, 0) != 0) {
-            till_log(LOG_ERROR, "Failed to install Till on host '%s'", name);
-            till_error("Failed to install Till on remote\n");
-            till_error("Please ensure the remote host has:\n");
-            till_error("  - git installed\n");
-            till_error("  - C compiler (gcc/clang) installed\n");
-            till_error("  - Internet connectivity to GitHub\n");
-            cJSON_Delete(json);
-            return -1;
-        }
-        
-        printf("✓ Till installed successfully\n");
-        till_log(LOG_INFO, "Till installed on host '%s'", name);
-    }
-    
-    /* Verify installation - till runs from its build directory */
-    if (run_ssh_command(user, hostname, port, 
-                       "~/" TILL_REMOTE_INSTALL_PATH "/till --version",
-                       output, sizeof(output)) == 0) {
-        printf("✓ Till is working on remote host\n");
-        printf("✓ Till location: ~/%s/till\n", TILL_REMOTE_INSTALL_PATH);
-        
-        /* Update status */
-        cJSON_SetValuestring(cJSON_GetObjectItem(host, "status"), "ready");
-        save_till_json("hosts-local.json", json);
-        
-        till_log(LOG_INFO, "Till setup complete on host '%s'", name);
-    } else {
-        printf("✗ Error: Till verification failed\n");
-        till_log(LOG_ERROR, "Till verification failed on host '%s'", name);
-        cJSON_Delete(json);
-        return -1;
-    }
-    
-    cJSON_Delete(json);
-    return 0;
-}
 
 /* Execute command on remote host */
 int till_host_exec(const char *name, const char *command) {
@@ -578,8 +478,7 @@ static void print_host_help(void) {
     printf("Commands:\n");
     printf("  add <name> <user>@<host>[:port]  Add a new host\n");
     printf("  test <name>                      Test SSH connectivity\n");
-    printf("  setup <name>                     Install Till on remote host\n");
-    printf("  update [name]                    Update Till on host(s)\n");
+    printf("  update [name]                    Update Till on host(s) (auto-installs if needed)\n");
     printf("  sync [name]                      Sync Tekton installations on host(s)\n");
     printf("  exec <name> <command>            Execute command on remote\n");
     printf("  ssh <name> [args]                SSH to remote host\n");
@@ -591,8 +490,7 @@ static void print_host_help(void) {
     printf("  - If name omitted: operates on all configured hosts\n");
     printf("\nExamples:\n");
     printf("  till host add m2 user@192.168.1.100\n");
-    printf("  till host setup m2\n");
-    printf("  till host update              # Update Till on all hosts\n");
+    printf("  till host update              # Update/install Till on all hosts\n");
     printf("  till host update m2           # Update Till on specific host\n");
     printf("  till host sync                # Sync all hosts\n");
     printf("  till host sync m2             # Sync specific host\n");
@@ -899,6 +797,42 @@ static int till_host_update_configs(void) {
     return hosts_failed > 0 ? 1 : 0;
 }
 
+/* Ensure Till is installed on remote host */
+static int ensure_till_installed(const char *user, const char *hostname, int port) {
+    char output[1024];
+
+    /* Check if Till exists */
+    if (run_ssh_command(user, hostname, port,
+                       "test -x ~/projects/github/till/till && echo EXISTS",
+                       output, sizeof(output)) == 0 && strstr(output, "EXISTS")) {
+        return 0;  /* Already installed */
+    }
+
+    /* Till not found, install it */
+    printf("  Till not found, installing...\n");
+
+    char install_cmd[2048];
+    snprintf(install_cmd, sizeof(install_cmd),
+        "mkdir -p ~/%s && cd ~/%s && "
+        "git clone %s.git %s && "
+        "cd %s && make install",
+        TILL_PROJECTS_BASE, TILL_PROJECTS_BASE,
+        TILL_REPO_URL, TILL_GITHUB_REPO,
+        TILL_GITHUB_REPO);
+
+    if (run_ssh_command(user, hostname, port, install_cmd, output, sizeof(output)) != 0) {
+        till_error("Failed to install Till on remote");
+        till_error("Please ensure the remote host has:");
+        till_error("  - git installed");
+        till_error("  - C compiler (gcc/clang) installed");
+        till_error("  - Internet connectivity to GitHub");
+        return -1;
+    }
+
+    printf("  ✓ Till installed successfully\n");
+    return 0;
+}
+
 /* Run a Till command on a specific remote host */
 static int run_till_on_host(const char *host_name, const char *till_cmd) {
     /* Load hosts file */
@@ -930,6 +864,12 @@ static int run_till_on_host(const char *host_name, const char *till_cmd) {
     if (!user || !hostname) {
         cJSON_Delete(json);
         till_error("Invalid host configuration for '%s'", host_name);
+        return -1;
+    }
+
+    /* Ensure Till is installed first */
+    if (ensure_till_installed(user, hostname, port) != 0) {
+        cJSON_Delete(json);
         return -1;
     }
 
@@ -1014,6 +954,13 @@ static int run_till_on_all_hosts(const char *till_cmd) {
 
         total_hosts++;
         printf("\n[%s] Running 'till %s'...\n", host_name, till_cmd);
+
+        /* Ensure Till is installed first */
+        if (ensure_till_installed(user, hostname, port) != 0) {
+            printf("  ✗ Failed to install Till on %s\n", host_name);
+            failed++;
+            continue;
+        }
 
         /* Run the till command on remote host - try multiple paths */
         char output[8192];
@@ -1125,13 +1072,6 @@ int till_host_command(int argc, char *argv[]) {
             return -1;
         }
         return till_host_test(argv[1]);
-    }
-    else if (strcmp(subcmd, "setup") == 0) {
-        if (argc < 2) {
-            till_error("Usage: till host setup <name>\n");
-            return -1;
-        }
-        return till_host_setup(argv[1]);
     }
     else if (strcmp(subcmd, "exec") == 0) {
         if (argc < 3) {

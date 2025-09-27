@@ -11,9 +11,6 @@ int till_host_add(const char *name, const char *user_at_host);
 /* Test SSH connectivity to a host */
 int till_host_test(const char *name);
 
-/* Setup Till on remote host */
-int till_host_setup(const char *name);
-
 /* Execute command on remote host */
 int till_host_exec(const char *name, const char *command);
 
