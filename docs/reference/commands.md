@@ -146,20 +146,6 @@ till uninstall coder-a.tekton.development.us
 
 ## Host Management Commands
 
-### till host init
-
-Initialize Till's SSH environment and generate federation keys.
-
-```bash
-till host init
-```
-
-Creates:
-- SSH configuration directory (`~/.till/ssh/`)
-- Ed25519 key pair for federation
-- Host database
-- SSH config file
-
 ### till host add
 
 Add a remote host to Till's management.
@@ -198,49 +184,87 @@ Examples:
 till host test laptop
 ```
 
-### till host setup
+### till host update
 
-Install Till on a remote host.
+Update Till on a remote host (installs if not present).
 
 ```bash
-till host setup <name>
+till host update [name]
 ```
 
-Process:
-1. Creates directory structure
-2. Clones Till repository
-3. Builds Till
-4. Verifies installation
+| Argument | Description |
+|----------|-------------|
+| `name` | Specific host to update (optional) |
+
+Without a name, updates all configured hosts.
 
 Examples:
 ```bash
-till host setup laptop
+till host update          # Update all hosts
+till host update laptop   # Update specific host
 ```
 
-### till host deploy
 
-Deploy a Tekton installation to a remote host.
+### till host exec
+
+Execute command on remote host.
 
 ```bash
-till host deploy <name> [installation]
+till host exec <name> <command>
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `name` | Host name |
-| `installation` | Specific installation to deploy (optional) |
-
-If no installation specified, deploys the primary Tekton.
+| `command` | Command to execute |
 
 Examples:
 ```bash
-till host deploy laptop                          # Deploy primary
-till host deploy laptop coder-a.tekton.dev.us   # Deploy specific
+till host exec laptop "till status"
+till host exec server "ls -la"
+```
+
+### till host ssh
+
+Open SSH session to remote host.
+
+```bash
+till host ssh <name> [command]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `name` | Host name |
+| `command` | Optional command to execute |
+
+Examples:
+```bash
+till host ssh laptop              # Interactive SSH session
+till host ssh laptop "till sync"  # Execute command and exit
+```
+
+### till host remove
+
+Remove host from configuration.
+
+```bash
+till host remove <name> [--clean-remote]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `name` | Host name to remove |
+| `--clean-remote` | Also remove Till from remote host |
+
+Examples:
+```bash
+till host remove laptop
+till host remove laptop --clean-remote
 ```
 
 ### till host sync
 
-Synchronize from remote hosts.
+Run 'till sync' on remote host(s) to sync their Tekton installations.
 
 ```bash
 till host sync [name]
@@ -250,12 +274,12 @@ till host sync [name]
 |----------|-------------|
 | `name` | Specific host to sync (optional) |
 
-Without a name, syncs all configured hosts.
+Without a name, runs sync on all configured hosts.
 
 Examples:
 ```bash
-till host sync          # Sync all hosts
-till host sync laptop   # Sync specific host
+till host sync          # Sync Tekton on all hosts
+till host sync laptop   # Sync Tekton on specific host
 ```
 
 ### till host status
@@ -333,85 +357,43 @@ Examples:
 till release numa       # Allow numa updates
 ```
 
-## Menu Commands
-
-### till menu add
-
-Add a component to the menu of the day catalog.
-
-```bash
-till menu add <component> <repo> [version] [availability]
-```
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `component` | Component name | Required |
-| `repo` | Git repository URL | Required |
-| `version` | Component version | v1.0.0 |
-| `availability` | Trust levels and types | anonymous=optional,named=optional,trusted=standard |
-
-Availability format: `level=type,level=type,...`
-- Levels: `anonymous`, `named`, `trusted`
-- Types: `optional`, `standard`
-
-Examples:
-```bash
-till menu add Tekton https://github.com/user/Tekton.git
-till menu add Numa https://github.com/org/numa.git v2.1.0
-till menu add Rhetor https://github.com/org/rhetor.git v1.5.0 anonymous=optional,named=standard,trusted=standard
-```
-
-### till menu remove
-
-Remove a component from the menu of the day catalog.
-
-```bash
-till menu remove <component>
-```
-
-| Argument | Description |
-|----------|-------------|
-| `component` | Component name to remove |
-
-Examples:
-```bash
-till menu remove Tekton
-till menu remove Numa
-```
 
 ## Federation Commands
 
-### till federate init
+### till federate join
 
 Join the federation network.
 
 ```bash
-till federate init --mode <mode> --name <name>
+till federate join <gist_id> [--mode <mode>]
 ```
 
-| Option | Description | Required |
-|--------|-------------|----------|
-| `--mode` | Federation mode: named, trusted | Yes |
-| `--name` | Federation name (FQN format) | Yes |
+| Argument | Description |
+|----------|-------------|
+| `gist_id` | GitHub Gist ID of the federation to join |
+| `--mode` | Federation mode: anonymous, named, trusted (default: anonymous) |
 
 Examples:
 ```bash
-till federate init --mode named --name alice.dev.us
-till federate init --mode trusted --name team.company.us
+till federate join abc123def456
+till federate join abc123def456 --mode named
+till federate join abc123def456 --mode trusted
 ```
 
 ### till federate status
 
-Show federation status and relationships.
+Show federation status and configuration.
 
 ```bash
-till federate status [options]
+till federate status
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--verbose` | Show detailed information |
-| `--json` | Output in JSON format |
+Shows:
+- Federation mode (anonymous, named, trusted)
+- Site ID
+- Gist ID
+- Last sync time
+- Auto-sync status
 
 ### till federate leave
 
@@ -421,34 +403,45 @@ Leave the federation network.
 till federate leave
 ```
 
-This:
-- Deregisters from GitHub
-- Removes federation configuration
-- Retains local installations
+This removes federation configuration but retains local installations.
 
-## Discovery Commands
+### till federate set
 
-### till discover
-
-Discover existing Tekton installations.
+Set federation configuration values.
 
 ```bash
-till discover [options]
+till federate set <key> <value>
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--force` | Force rediscovery |
-| `--path PATH` | Specific path to search |
-
-Till automatically runs discovery on every command, but you can force it manually.
+Available settings:
+- `auto_sync` - Enable/disable automatic sync (true/false)
 
 Examples:
 ```bash
-till discover
-till discover --force
-till discover --path ~/projects
+till federate set auto_sync true
+till federate set auto_sync false
 ```
+
+### till federate menu
+
+Manage federation menu components.
+
+```bash
+till federate menu <action> [args...]
+```
+
+Actions:
+- `add` - Add component to menu
+- `remove` - Remove component from menu
+- `list` - List menu components
+
+Examples:
+```bash
+till federate menu add Numa https://github.com/org/numa.git
+till federate menu remove Numa
+till federate menu list
+```
+
 
 ## Update Commands
 
@@ -472,70 +465,26 @@ till update --check     # Check for Till updates
 till update --apply     # Update Till to latest version
 ```
 
-## Configuration Commands
-
-### till config
-
-Manage Till configuration.
-
-```bash
-till config [options]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--list` | Show all configuration |
-| `--get KEY` | Get specific configuration value |
-| `--set KEY VALUE` | Set configuration value |
-
-Examples:
-```bash
-till config --list
-till config --get federation.mode
-till config --set sync.auto true
-```
 
 ## Troubleshooting Commands
 
-### till doctor
+### till repair
 
-Diagnose and fix common issues.
+Check and repair Till configuration and installations.
 
 ```bash
-till doctor [options]
+till repair
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--fix` | Attempt to fix issues automatically |
-| `--verbose` | Show detailed diagnostics |
-
-Checks:
+Checks and fixes:
 - Directory permissions
-- Git configuration
-- SSH connectivity
-- Port availability
 - Configuration validity
-
-### till logs
-
-View Till operation logs.
-
-```bash
-till logs [options]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--tail N` | Show last N lines |
-| `--follow` | Follow log output |
-| `--level LEVEL` | Filter by log level |
+- Installation registry
+- Federation configuration
 
 Examples:
 ```bash
-till logs --tail 50
-till logs --follow
-till logs --level ERROR
+till repair
 ```
 
 ## Environment Variables
@@ -583,32 +532,16 @@ till status --json | jq '.installations'
 till host status --json | jq '.hosts[].status'
 ```
 
-## Aliases and Shortcuts
-
-Common command shortcuts:
-
-```bash
-# These are equivalent:
-till sync
-till s
-
-till host status
-till h status
-till hs
-
-till federate init
-till f init
-```
 
 ## Command Chaining
 
 Till commands can be chained for automation:
 
 ```bash
-# Setup and deploy in one line
+# Add host and update Till on it
 till host add prod user@server && \
-till host setup prod && \
-till host deploy prod
+till host update prod && \
+till host sync prod
 
 # Check and sync if needed
 till status --json | grep -q updates && till sync

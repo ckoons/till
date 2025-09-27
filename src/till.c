@@ -170,21 +170,31 @@ static void print_usage(const char *program) {
     printf("\nCommands:\n");
     printf("  (none)              Dry run - show what sync would do\n");
     
-    /* Print commands from table */
-    for (int i = 0; commands[i].name != NULL; i++) {
-        printf("  %-18s  %s\n", commands[i].name, commands[i].description);
+    /* Print commands from table - sorted alphabetically */
+    const char *sorted_commands[] = {
+        "federate", "help", "hold", "host", "install", "release",
+        "repair", "run", "status", "sync", "uninstall", "update", "watch"
+    };
+
+    for (int i = 0; i < sizeof(sorted_commands)/sizeof(sorted_commands[0]); i++) {
+        for (int j = 0; commands[j].name != NULL; j++) {
+            if (strcmp(sorted_commands[i], commands[j].name) == 0) {
+                printf("  %-18s  %s\n", commands[j].name, commands[j].description);
+                break;
+            }
+        }
     }
     
-    /* Additional host subcommands */
+    /* Additional host subcommands - alphabetically sorted */
     printf("\nHost subcommands:\n");
     printf("  host add <name> <user>@<host>  Add remote host\n");
-    printf("  host test <name>    Test host connectivity\n");
-    printf("  host setup <name>   Install Till on remote host\n");
     printf("  host exec <name> <cmd>  Execute command on remote host\n");
-    printf("  host ssh <name> [cmd]   Open SSH session to remote host\n");
-    printf("  host sync           Sync hosts configuration across all machines\n");
-    printf("  host status [name]  Show host status\n");
     printf("  host remove <name>  Remove host from configuration\n");
+    printf("  host ssh <name> [cmd]   Open SSH session to remote host\n");
+    printf("  host status [name]  Show host status\n");
+    printf("  host sync [name]    Sync Tekton installations on host(s)\n");
+    printf("  host test <name>    Test host connectivity\n");
+    printf("  host update [name]  Update Till on host(s)\n");
     printf("\nExamples:\n");
     printf("  till                      # Show what would be synced\n");
     printf("  till sync                 # Synchronize now\n");
