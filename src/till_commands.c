@@ -87,19 +87,19 @@ int cmd_sync(int argc, char *argv[]) {
         till_warn("No Tekton installations found");
         return 0;
     }
-    
+
+    /* Variables for tracking sync status */
+    int total = 0, updated = 0, failed = 0, held = 0;
+
     cJSON *installations = cJSON_GetObjectItem(registry, "installations");
     if (!installations || cJSON_GetArraySize(installations) == 0) {
         till_warn("No Tekton installations registered");
-        cJSON_Delete(registry);
-        return 0;
-    }
-    
-    /* Clean up expired holds first */
-    cleanup_expired_holds();
-    
+        /* Don't return early - still need to process menu for auto-install */
+    } else {
+        /* Clean up expired holds first */
+        cleanup_expired_holds();
+
     /* Sync each installation */
-    int total = 0, updated = 0, failed = 0, held = 0;
     
     cJSON *inst;
     cJSON_ArrayForEach(inst, installations) {
@@ -153,30 +153,31 @@ int cmd_sync(int argc, char *argv[]) {
             }
         }
     }
-    
+
+        /* Summary */
+        printf("\nSync Summary:\n");
+        printf("  Total: %d installations\n", total);
+        if (!dry_run) {
+            printf("  Updated: %d\n", updated);
+            if (held > 0) {
+                printf("  Held: %d\n", held);
+            }
+            if (failed > 0) {
+                printf("  Failed: %d\n", failed);
+            }
+        } else {
+            if (held > 0) {
+                printf("  Held: %d (would be skipped)\n", held);
+            }
+        }
+
+        /* Record sync in schedule */
+        if (!dry_run) {
+            till_watch_record_sync(failed == 0, 0, updated, 0);
+        }
+    }  /* End of else block for installations check */
+
     cJSON_Delete(registry);
-    
-    /* Summary */
-    printf("\nSync Summary:\n");
-    printf("  Total: %d installations\n", total);
-    if (!dry_run) {
-        printf("  Updated: %d\n", updated);
-        if (held > 0) {
-            printf("  Held: %d\n", held);
-        }
-        if (failed > 0) {
-            printf("  Failed: %d\n", failed);
-        }
-    } else {
-        if (held > 0) {
-            printf("  Held: %d (would be skipped)\n", held);
-        }
-    }
-    
-    /* Record sync in schedule */
-    if (!dry_run) {
-        till_watch_record_sync(failed == 0, 0, updated, 0);
-    }
     
     /* Process menu_of_the_day.json if federation is enabled */
     if (!dry_run && file_exists(MENU_PATH)) {

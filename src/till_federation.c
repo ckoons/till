@@ -422,7 +422,15 @@ int till_federate_join(const char *trust_level) {
         printf("✓ Joined federation successfully\n");
         printf("  Site ID: %s\n", config.site_id);
         printf("  Trust Level: %s\n", config.trust_level);
-        printf("  Run 'till federate sync' to start syncing\n");
+
+        /* Automatically run sync to process menu and auto-install */
+        printf("\nRunning initial sync to process menu...\n");
+
+        /* Call cmd_sync to process menu and auto-install components */
+        extern int cmd_sync(int argc, char *argv[]);
+        char *sync_args[] = {"sync", NULL};
+        cmd_sync(1, sync_args);
+
         return 0;
     } else {
         till_error("Failed to save federation configuration");
