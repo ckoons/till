@@ -472,32 +472,36 @@ int self_update_till(void) {
         return -1;
     }
     
-    /* 5. BUILD - Compile new version */
-    printf("   Building new version...\n");
-    snprintf(cmd, sizeof(cmd), "cd \"%s\" && make clean >/dev/null 2>&1 && make 2>&1", till_dir);
-    
+    /* 5. BUILD - Compile new version and install */
+    printf("   Building and installing new version...\n");
+    snprintf(cmd, sizeof(cmd), "cd \"%s\" && make clean >/dev/null 2>&1 && make install 2>&1", till_dir);
+
     pipe = popen(cmd, "r");
     success = 1;
     while (fgets(output, sizeof(output), pipe)) {
         if (strstr(output, "error:") || strstr(output, "Error")) {
             printf("   %s", output);
             success = 0;
-        } else if (strstr(output, "Build complete")) {
+        } else if (strstr(output, "Build complete") ||
+                   strstr(output, "Installation complete") ||
+                   strstr(output, "Prerequisites verified") ||
+                   strstr(output, "GitHub CLI authenticated") ||
+                   strstr(output, "Till installation complete")) {
             printf("   %s", output);
         }
     }
     status = pclose(pipe);
-    
+
     if (status != 0 || !success) {
-        printf("   ❌ Build failed, rolling back\n");
+        printf("   ❌ Build/install failed, rolling back\n");
         rollback_till(backup_path, current_exe);
-        
+
         /* Also revert git */
         snprintf(cmd, sizeof(cmd), "cd \"%s\" && git reset --hard HEAD~1", till_dir);
         if (system(cmd) != 0) {
             till_error("Failed to reset git repository");
         }
-        
+
         release_lock_file(lock_fd);
         return -1;
     }

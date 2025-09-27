@@ -935,10 +935,22 @@ static int run_till_on_host(const char *host_name, const char *till_cmd) {
 
     printf("Running 'till %s' on %s...\n", till_cmd, host_name);
 
-    /* Run the till command on remote host */
+    /* Run the till command on remote host - try multiple paths */
     char output[8192];
     char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "till %s", till_cmd);
+    snprintf(cmd, sizeof(cmd),
+        "if command -v till >/dev/null 2>&1; then "
+        "till %s; "
+        "elif [ -x ~/.local/bin/till ]; then "
+        "~/.local/bin/till %s; "
+        "elif [ -x /usr/local/bin/till ]; then "
+        "/usr/local/bin/till %s; "
+        "elif [ -x ~/projects/github/till/till ]; then "
+        "~/projects/github/till/till %s; "
+        "else "
+        "echo 'Error: till not found'; exit 1; "
+        "fi",
+        till_cmd, till_cmd, till_cmd, till_cmd);
 
     int result = run_ssh_command(user, hostname, port, cmd, output, sizeof(output));
 
@@ -1003,10 +1015,22 @@ static int run_till_on_all_hosts(const char *till_cmd) {
         total_hosts++;
         printf("\n[%s] Running 'till %s'...\n", host_name, till_cmd);
 
-        /* Run the till command on remote host */
+        /* Run the till command on remote host - try multiple paths */
         char output[8192];
         char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "till %s", till_cmd);
+        snprintf(cmd, sizeof(cmd),
+            "if command -v till >/dev/null 2>&1; then "
+            "till %s; "
+            "elif [ -x ~/.local/bin/till ]; then "
+            "~/.local/bin/till %s; "
+            "elif [ -x /usr/local/bin/till ]; then "
+            "/usr/local/bin/till %s; "
+            "elif [ -x ~/projects/github/till/till ]; then "
+            "~/projects/github/till/till %s; "
+            "else "
+            "echo 'Error: till not found'; exit 1; "
+            "fi",
+            till_cmd, till_cmd, till_cmd, till_cmd);
 
         int result = run_ssh_command(user, hostname, port, cmd, output, sizeof(output));
 

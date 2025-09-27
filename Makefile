@@ -163,13 +163,62 @@ man: $(TARGET)
 	@echo "Till configuration directory" >> till.1
 	@echo "Man page generated"
 
-# Check prerequisites
+# Check prerequisites and attempt auto-install if missing
 .PHONY: check-prereqs
 check-prereqs:
-	@echo "Checking prerequisites..."
-	@command -v git >/dev/null 2>&1 || { echo "Error: git is required but not installed."; echo "Please install: https://git-scm.com/"; exit 1; }
-	@command -v gh >/dev/null 2>&1 || { echo "Error: GitHub CLI (gh) is required but not installed."; echo "Please install: https://cli.github.com/"; exit 1; }
-	@echo "✓ Prerequisites verified (git, gh)"
+	@echo "Checking and installing prerequisites..."
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo "Warning: git is not installed. Attempting to install..."; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			if command -v brew >/dev/null 2>&1; then \
+				brew install git || echo "Warning: Could not install git automatically"; \
+			else \
+				echo "Installing Homebrew first..."; \
+				/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
+				brew install git || echo "Warning: Could not install git automatically"; \
+			fi; \
+		elif [ "$$(uname -s)" = "Linux" ]; then \
+			if command -v apt-get >/dev/null 2>&1; then \
+				sudo apt-get update && sudo apt-get install -y git || echo "Warning: Could not install git automatically"; \
+			elif command -v yum >/dev/null 2>&1; then \
+				sudo yum install -y git || echo "Warning: Could not install git automatically"; \
+			fi; \
+		fi; \
+		if ! command -v git >/dev/null 2>&1; then \
+			echo "Error: git installation failed. Please install manually: https://git-scm.com/"; \
+			exit 1; \
+		fi; \
+	fi
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "Warning: GitHub CLI (gh) is not installed. Attempting to install..."; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			if command -v brew >/dev/null 2>&1; then \
+				brew install gh || echo "Warning: Could not install gh automatically"; \
+			else \
+				echo "Installing Homebrew first..."; \
+				/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
+				brew install gh || echo "Warning: Could not install gh automatically"; \
+			fi; \
+		elif [ "$$(uname -s)" = "Linux" ]; then \
+			if command -v apt-get >/dev/null 2>&1; then \
+				curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null && \
+				echo "deb [arch=$$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
+				sudo apt update && sudo apt install gh -y || echo "Warning: Could not install gh automatically"; \
+			elif command -v yum >/dev/null 2>&1; then \
+				sudo yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
+				sudo yum install gh -y || echo "Warning: Could not install gh automatically"; \
+			fi; \
+		fi; \
+		if ! command -v gh >/dev/null 2>&1; then \
+			echo "Warning: gh installation failed. Federation features will be limited."; \
+			echo "To install manually: https://cli.github.com"; \
+		else \
+			echo "✓ GitHub CLI (gh) installed successfully"; \
+		fi; \
+	else \
+		echo "✓ GitHub CLI (gh) already installed"; \
+	fi
+	@echo "✓ Prerequisites check complete"
 
 # Setup GitHub authentication
 .PHONY: setup-github
