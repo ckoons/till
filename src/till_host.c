@@ -801,11 +801,30 @@ static int till_host_update_configs(void) {
 static int ensure_till_installed(const char *user, const char *hostname, int port) {
     char output[1024];
 
-    /* Check if Till exists */
+    /* Check if Till directory exists and has the executable */
     if (run_ssh_command(user, hostname, port,
-                       "test -x ~/projects/github/till/till && echo EXISTS",
+                       "[ -d ~/projects/github/till ] && [ -f ~/projects/github/till/till ] && echo EXISTS",
                        output, sizeof(output)) == 0 && strstr(output, "EXISTS")) {
         return 0;  /* Already installed */
+    }
+
+    /* Check if Till directory exists but needs building */
+    if (run_ssh_command(user, hostname, port,
+                       "[ -d ~/projects/github/till ] && echo DIR_EXISTS",
+                       output, sizeof(output)) == 0 && strstr(output, "DIR_EXISTS")) {
+        printf("  Till directory exists, updating and building...\n");
+
+        char update_cmd[1024];
+        snprintf(update_cmd, sizeof(update_cmd),
+            "cd ~/projects/github/till && git pull && make install");
+
+        if (run_ssh_command(user, hostname, port, update_cmd, output, sizeof(output)) == 0) {
+            printf("  ✓ Till updated successfully\n");
+            return 0;
+        } else {
+            printf("  ⚠ Warning: Failed to build Till\n");
+            return -1;
+        }
     }
 
     /* Till not found, install it */
