@@ -85,7 +85,7 @@ int till_host_add(const char *name, const char *user_at_host) {
     }
     
     /* Load or create hosts file */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         json = cJSON_CreateObject();
         cJSON_AddObjectToObject(json, "hosts");
@@ -136,7 +136,7 @@ int till_host_add(const char *name, const char *user_at_host) {
     cJSON_SetValuestring(cJSON_GetObjectItem(json, "updated"), ts);
     
     /* Save hosts file */
-    if (save_till_json("hosts-local.json", json) != 0) {
+    if (save_till_json("config/hosts-local.json", json) != 0) {
         till_log(LOG_ERROR, "Failed to save hosts file");
         till_error("Failed to save hosts\n");
         cJSON_Delete(json);
@@ -166,7 +166,7 @@ int till_host_test(const char *name) {
     }
     
     /* Load hosts */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
         till_error("No hosts configured\n");
@@ -224,7 +224,7 @@ int till_host_test(const char *name) {
         
         /* Update status */
         cJSON_SetValuestring(cJSON_GetObjectItem(host, "status"), "ready");
-        save_till_json("hosts-local.json", json);
+        save_till_json("config/hosts-local.json", json);
         
         cJSON_Delete(json);
         return 0;
@@ -250,7 +250,7 @@ int till_host_exec(const char *name, const char *command) {
     }
     
     /* Load hosts */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
         till_error("No hosts configured\n");
@@ -310,7 +310,7 @@ int till_host_ssh(const char *name, int argc, char *argv[]) {
     }
     
     /* Load hosts */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
         till_error("No hosts configured\n");
@@ -353,7 +353,7 @@ int till_host_remove(const char *name, int clean_remote) {
     }
     
     /* Load hosts */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_log(LOG_ERROR, "No hosts configured");
         till_error("No hosts configured\n");
@@ -392,7 +392,7 @@ int till_host_remove(const char *name, int clean_remote) {
     printf("Removing host '%s'...\n", name);
     cJSON_DeleteItemFromObject(hosts, name);
     
-    if (save_till_json("hosts-local.json", json) != 0) {
+    if (save_till_json("config/hosts-local.json", json) != 0) {
         till_log(LOG_ERROR, "Failed to update hosts file");
         till_error("Failed to update hosts file\n");
         cJSON_Delete(json);
@@ -416,7 +416,7 @@ int till_host_remove(const char *name, int clean_remote) {
 
 /* Show host status */
 int till_host_status(const char *name) {
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         printf("No hosts configured.\n");
         printf("Run: till host add <name> <user>@<host>\n");
@@ -503,7 +503,7 @@ static int till_host_update_configs(void) {
     till_log(LOG_INFO, "Updating host configurations");
     
     /* Load local hosts file */
-    cJSON *local_json = load_till_json("hosts-local.json");
+    cJSON *local_json = load_till_json("config/hosts-local.json");
     if (!local_json) {
         till_error("No hosts configured\n");
         return -1;
@@ -644,7 +644,7 @@ static int till_host_update_configs(void) {
         char remote_hosts[8192] = "";
         if (strlen(remote_till_dir) > 0) {
             char cat_cmd[1024];
-            snprintf(cat_cmd, sizeof(cat_cmd), "cat %s/hosts-local.json 2>/dev/null", remote_till_dir);
+            snprintf(cat_cmd, sizeof(cat_cmd), "cat %s/.till/config/hosts-local.json 2>/dev/null", remote_till_dir);
             if (run_ssh_command(user, hostname, port, cat_cmd,
                                remote_hosts, sizeof(remote_hosts)) == 0 && strlen(remote_hosts) > 0) {
             
@@ -691,7 +691,7 @@ static int till_host_update_configs(void) {
     
     /* Save merged hosts locally */
     printf("\nSaving merged hosts file...\n");
-    if (save_till_json("hosts-local.json", new_json) == 0) {
+    if (save_till_json("config/hosts-local.json", new_json) == 0) {
         printf("✓ Local hosts file updated\n");
     } else {
         till_error("Failed to save merged hosts file\n");
@@ -759,7 +759,7 @@ static int till_host_update_configs(void) {
                 /* Use cat with heredoc to write the file safely */
                 char cmd[20480];
                 snprintf(cmd, sizeof(cmd),
-                        "cat > %s/hosts-local.json << 'EOF'\n%s\nEOF",
+                        "cat > %s/.till/config/hosts-local.json << 'EOF'\n%s\nEOF",
                         till_dir, hosts_json_str);
                 
                 if (run_ssh_command(user, hostname, port, cmd, NULL, 0) == 0) {
@@ -847,7 +847,7 @@ static int ensure_till_installed(const char *user, const char *hostname, int por
 /* Run a Till command on a specific remote host */
 static int run_till_on_host(const char *host_name, const char *till_cmd) {
     /* Load hosts file */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_error("No hosts configured");
         return -1;
@@ -927,7 +927,7 @@ static int run_till_on_host(const char *host_name, const char *till_cmd) {
 /* Run a Till command on all remote hosts */
 static int run_till_on_all_hosts(const char *till_cmd) {
     /* Load hosts file */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_error("No hosts configured");
         return -1;

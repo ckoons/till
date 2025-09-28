@@ -296,8 +296,8 @@ int install_tekton(install_options_t *opts) {
         return -1;
     }
     
-    /* Step 5: Create .till symlink */
-    create_till_symlink(opts->path);
+    /* Step 5: .till symlink no longer needed - components access via absolute path */
+    /* create_till_symlink(opts->path); -- removed */
     
     /* Step 6: Setup Python tooling */
     printf("\nSetting up Python tooling...\n");

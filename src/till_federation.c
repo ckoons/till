@@ -19,9 +19,9 @@
 
 /* Get federation config path in Till installation directory */
 static int get_federation_config_path(char *path, size_t size) {
-    /* Federation config is in .till/federation.json relative to Till installation */
+    /* Federation config is in .till/config/federation.json relative to Till installation */
     /* Since ensure_directories() changes to Till installation dir, we use relative path */
-    snprintf(path, size, ".till/federation.json");
+    snprintf(path, size, ".till/config/federation.json");
     return 0;
 }
 

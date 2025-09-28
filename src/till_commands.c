@@ -848,8 +848,8 @@ int cmd_repair(int argc, char *argv[]) {
         }
     }
     
-    /* 2. Check and repair .till symlinks in Tekton directories */
-    printf("\nChecking Tekton .till symlinks...\n");
+    /* 2. Check Tekton installations */
+    printf("\nChecking Tekton installations...\n");
     cJSON *registry = load_till_json("tekton/till-private.json");
     if (registry) {
         cJSON *installations = cJSON_GetObjectItem(registry, "installations");
@@ -858,32 +858,12 @@ int cmd_repair(int argc, char *argv[]) {
             cJSON_ArrayForEach(inst, installations) {
                 const char *name = inst->string;
                 const char *root = json_get_string(inst, "root", NULL);
-                
-                if (root) {
-                    char symlink_path[TILL_MAX_PATH];
-                    snprintf(symlink_path, sizeof(symlink_path), "%s/.till", root);
-                    
-                    struct stat st;
-                    if (lstat(symlink_path, &st) != 0) {
-                        printf("  ✗ Missing symlink: %s/.till\n", root);
-                        
-                        /* Create symlink */
-                        char till_dir[TILL_MAX_PATH];
-                        get_till_dir(till_dir, sizeof(till_dir));
-                        
-                        if (symlink(till_dir, symlink_path) == 0) {
-                            printf("    ✓ Created symlink\n");
-                            repairs_made++;
-                        } else {
-                            printf("    ✗ Failed to create symlink\n");
-                            errors_found++;
-                        }
-                    } else if (!S_ISLNK(st.st_mode)) {
-                        printf("  ✗ Not a symlink: %s/.till\n", root);
-                        errors_found++;
-                    } else {
-                        printf("  ✓ OK: %s (%s)\n", name, root);
-                    }
+
+                if (root && dir_exists(root)) {
+                    printf("  ✓ OK: %s (%s)\n", name, root);
+                } else if (root) {
+                    printf("  ✗ Missing: %s (%s)\n", name, root);
+                    errors_found++;
                 }
             }
         }
@@ -894,7 +874,7 @@ int cmd_repair(int argc, char *argv[]) {
     printf("\nChecking JSON files...\n");
     const char *json_files[] = {
         "tekton/till-private.json",
-        "hosts-local.json",
+        "config/hosts-local.json",
         NULL
     };
     
@@ -920,7 +900,7 @@ int cmd_repair(int argc, char *argv[]) {
             } else {
                 /* Create minimal valid file */
                 cJSON *new_json = cJSON_CreateObject();
-                if (strcmp(json_files[i], "hosts-local.json") == 0) {
+                if (strcmp(json_files[i], "config/hosts-local.json") == 0) {
                     cJSON_AddObjectToObject(new_json, "hosts");
                     json_set_string(new_json, "updated", "0");
                 } else {

@@ -260,6 +260,29 @@ static int ensure_directories(void) {
         }
     }
 
+    /* Create .till/till -> .. symlink for convenience */
+    char symlink_path[TILL_MAX_PATH];
+    snprintf(symlink_path, sizeof(symlink_path), "%s/till", TILL_HOME);
+
+    /* Check if symlink already exists */
+    struct stat st;
+    if (lstat(symlink_path, &st) == 0) {
+        if (S_ISLNK(st.st_mode)) {
+            /* Already exists as symlink, assume it's correct */
+            return 0;
+        } else {
+            /* Exists but not a symlink */
+            till_warn("%s exists but is not a symlink", symlink_path);
+            return -1;
+        }
+    }
+
+    /* Create the symlink pointing to parent directory */
+    if (symlink("..", symlink_path) != 0) {
+        till_warn("Could not create .till/till symlink: %s", strerror(errno));
+        /* Not fatal, continue */
+    }
+
     return 0;
 }
 

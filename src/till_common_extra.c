@@ -539,7 +539,7 @@ int run_ssh_command(const char *user, const char *host, int port,
 int run_ssh_host_command(const char *host_name, const char *remote_cmd,
                         char *output, size_t output_size) {
     /* Load host configuration */
-    cJSON *json = load_till_json("hosts-local.json");
+    cJSON *json = load_till_json("config/hosts-local.json");
     if (!json) {
         till_error("No hosts configured");
         return -1;

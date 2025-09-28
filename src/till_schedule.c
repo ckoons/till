@@ -27,7 +27,7 @@
 /* Load schedule configuration */
 static cJSON *load_schedule(void) {
     /* Try to load existing schedule */
-    cJSON *schedule = load_till_json("schedule.json");
+    cJSON *schedule = load_till_json("config/schedule.json");
     if (schedule) {
         return schedule;
     }
@@ -61,7 +61,7 @@ static cJSON *load_schedule(void) {
 
 /* Save schedule configuration */
 static int save_schedule(cJSON *schedule) {
-    return save_till_json("schedule.json", schedule);
+    return save_till_json("config/schedule.json", schedule);
 }
 
 /* Parse time in HH:MM format */
