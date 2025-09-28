@@ -480,6 +480,7 @@ static void print_host_help(void) {
     printf("  test <name>                      Test SSH connectivity\n");
     printf("  update [name]                    Update Till on host(s) (auto-installs if needed)\n");
     printf("  sync [name]                      Sync Tekton installations on host(s)\n");
+    printf("  watch [name] [options]           Manage watch/schedule on host(s)\n");
     printf("  exec <name> <command>            Execute command on remote\n");
     printf("  ssh <name> [args]                SSH to remote host\n");
     printf("  remove <name> [--clean-remote]   Remove a host\n");
@@ -488,11 +489,20 @@ static void print_host_help(void) {
     printf("\nCommands with optional [name]:\n");
     printf("  - If name provided: operates on specific host\n");
     printf("  - If name omitted: operates on all configured hosts\n");
+    printf("\nWatch options (same as 'till watch'):\n");
+    printf("  --enable                         Enable automatic sync\n");
+    printf("  --disable                        Disable automatic sync\n");
+    printf("  --status                         Show current schedule\n");
+    printf("  <hours>                          Set interval in hours\n");
+    printf("  --daily-at HH:MM                 Run daily at specific time\n");
     printf("\nExamples:\n");
     printf("  till host add m2 user@192.168.1.100\n");
     printf("  till host update              # Update/install Till on all hosts\n");
     printf("  till host update m2           # Update Till on specific host\n");
     printf("  till host sync                # Sync all hosts\n");
+    printf("  till host watch --enable      # Enable watch on all hosts\n");
+    printf("  till host watch m2 --disable  # Disable watch on specific host\n");
+    printf("  till host watch m2 24         # Set 24-hour schedule on m2\n");
     printf("  till host sync m2             # Sync specific host\n");
     printf("  till host exec m2 'till status'\n");
 }
@@ -1122,6 +1132,32 @@ int till_host_command(int argc, char *argv[]) {
     else if (strcmp(subcmd, "sync") == 0) {
         const char *host_name = (argc > 1) ? argv[1] : NULL;
         return till_host_sync(host_name);
+    }
+    else if (strcmp(subcmd, "watch") == 0) {
+        /* Pass remaining args to till watch on remote host(s) */
+        const char *host_name = NULL;
+        int watch_args_start = 1;
+
+        /* Check if first arg is a hostname (not a watch option) */
+        if (argc > 1 && argv[1][0] != '-') {
+            host_name = argv[1];
+            watch_args_start = 2;
+        }
+
+        /* Build watch command */
+        char watch_cmd[1024] = "till watch";
+        for (int i = watch_args_start; i < argc; i++) {
+            strcat(watch_cmd, " ");
+            strcat(watch_cmd, argv[i]);
+        }
+
+        if (host_name) {
+            printf("Running watch command on host '%s': %s\n", host_name, watch_cmd);
+            return run_till_on_host(host_name, watch_cmd + 5); /* Skip "till " prefix */
+        } else {
+            printf("Running watch command on all hosts: %s\n", watch_cmd);
+            return run_till_on_all_hosts(watch_cmd + 5); /* Skip "till " prefix */
+        }
     }
     else {
         till_error("Unknown host subcommand: %s\n\n", subcmd);

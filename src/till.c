@@ -195,6 +195,7 @@ static void print_usage(const char *program) {
     printf("  host sync [name]    Sync Tekton installations on host(s)\n");
     printf("  host test <name>    Test host connectivity\n");
     printf("  host update [name]  Update Till on host(s)\n");
+    printf("  host watch [name] [options]  Manage watch/schedule on host(s)\n");
     printf("\nExamples:\n");
     printf("  till                      # Show what would be synced\n");
     printf("  till sync                 # Synchronize now\n");

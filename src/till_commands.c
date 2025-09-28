@@ -76,7 +76,7 @@ int cmd_sync(int argc, char *argv[]) {
     
     printf("Till Sync\n");
     printf("=========\n\n");
-    
+
     if (dry_run) {
         printf("DRY RUN MODE - No changes will be made\n\n");
     }
@@ -86,6 +86,28 @@ int cmd_sync(int argc, char *argv[]) {
     if (!registry) {
         till_warn("No Tekton installations found");
         return 0;
+    }
+
+    /* Check if sync is enabled in federation config */
+    federation_config_t fed_config = {0};
+    int sync_enabled = 1;  /* Default to enabled if no federation config */
+    if (load_federation_config(&fed_config) == 0) {
+        sync_enabled = fed_config.sync_enabled;
+        if (!sync_enabled) {
+            if (dry_run) {
+                printf("⚠️  Sync is DISABLED in federation configuration\n");
+                printf("   (Actual sync would be blocked)\n\n");
+            } else {
+                printf("❌ Sync is disabled in federation configuration\n");
+                printf("   To enable: till federate set sync_enabled true\n");
+                cJSON_Delete(registry);
+                return 0;
+            }
+        }
+    }
+
+    if (dry_run && sync_enabled) {
+        printf("✓ Sync is enabled\n\n");
     }
 
     /* Variables for tracking sync status */
