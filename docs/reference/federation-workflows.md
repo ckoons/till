@@ -109,7 +109,7 @@ $ cat ~/.till/federation.json
   "github_token_encrypted": "",
   "trust_level": "anonymous",
   "last_sync": 0,
-  "auto_sync": true,
+  "sync_enabled": true,
   "last_menu_date": ""
 }
 ```

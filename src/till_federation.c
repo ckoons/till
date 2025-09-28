@@ -77,12 +77,8 @@ int load_federation_config(federation_config_t *config) {
 
     config->last_sync = (time_t)json_get_int(json, "last_sync", 0);
 
-    /* Check both sync_enabled (new) and auto_sync (old) */
-    if (cJSON_HasObjectItem(json, "sync_enabled")) {
-        config->auto_sync = json_get_bool(json, "sync_enabled", 0);
-    } else {
-        config->auto_sync = json_get_bool(json, "auto_sync", 0);
-    }
+    /* Load sync_enabled field */
+    config->sync_enabled = json_get_bool(json, "sync_enabled", 1);
     
     cJSON_Delete(json);
     return 0;
@@ -104,7 +100,7 @@ int save_federation_config(const federation_config_t *config) {
     cJSON_AddStringToObject(json, "gist_id", config->gist_id);
     cJSON_AddStringToObject(json, "trust_level", config->trust_level);
     cJSON_AddNumberToObject(json, "last_sync", (double)config->last_sync);
-    cJSON_AddBoolToObject(json, "auto_sync", config->auto_sync);
+    cJSON_AddBoolToObject(json, "sync_enabled", config->sync_enabled);
     cJSON_AddStringToObject(json, "last_menu_date", config->last_menu_date);
     
     int result = save_json_file(path, json);
@@ -133,7 +129,7 @@ int create_default_federation_config(void) {
 
     /* Set defaults */
     strcpy(config.trust_level, TILL_DEFAULT_MODE);  /* anonymous */
-    config.auto_sync = 1;  /* sync enabled by default */
+    config.sync_enabled = 1;  /* sync enabled by default */
     config.last_sync = 0;
     strcpy(config.gist_id, "");
     strcpy(config.last_menu_date, "");
@@ -182,9 +178,9 @@ int till_federate_set(const char *key, const char *value) {
         strncpy(config.trust_level, value, sizeof(config.trust_level) - 1);
     } else if (strcmp(key, "sync_enabled") == 0) {
         if (strcmp(value, "true") == 0 || strcmp(value, "1") == 0) {
-            config.auto_sync = 1;
+            config.sync_enabled = 1;
         } else if (strcmp(value, "false") == 0 || strcmp(value, "0") == 0) {
-            config.auto_sync = 0;
+            config.sync_enabled = 0;
         } else {
             till_error("sync_enabled must be true or false");
             return -1;
@@ -377,7 +373,7 @@ int till_federate_join(const char *trust_level) {
 
         generate_site_id(config.site_id, sizeof(config.site_id));
         strcpy(config.trust_level, TRUST_ANONYMOUS);
-        config.auto_sync = 1;
+        config.sync_enabled = 1;
         config.last_sync = 0;
 
         if (save_federation_config(&config) == 0) {
@@ -403,7 +399,7 @@ int till_federate_join(const char *trust_level) {
     /* Generate site ID */
     generate_site_id(config.site_id, sizeof(config.site_id));
     strcpy(config.trust_level, trust_level);
-    config.auto_sync = 1;
+    config.sync_enabled = 1;
     config.last_sync = 0;
 
     /* Create gist if not anonymous */
@@ -514,7 +510,7 @@ int till_federate_status(void) {
         printf("Last Sync:   Never\n");
     }
     
-    printf("Auto Sync:   %s\n", config.auto_sync ? "Enabled" : "Disabled");
+    printf("Sync Enabled: %s\n", config.sync_enabled ? "Yes" : "No");
     
     if (strlen(config.last_menu_date) > 0) {
         printf("Last Menu:   %s\n", config.last_menu_date);

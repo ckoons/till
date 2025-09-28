@@ -24,7 +24,7 @@ typedef struct {
     char gist_id[64];            /* GitHub Gist ID */
     char trust_level[32];        /* anonymous|named|trusted */
     time_t last_sync;            /* Last sync timestamp */
-    int auto_sync;               /* Auto-sync enabled */
+    int sync_enabled;            /* Sync enabled flag */
     char last_menu_date[32];     /* Date of last processed menu */
 } federation_config_t;
 

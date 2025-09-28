@@ -186,7 +186,7 @@ int cmd_sync(int argc, char *argv[]) {
 
         /* Load federation config to get mode */
         federation_config_t fed_config = {0};
-        if (load_federation_config(&fed_config) == 0 && fed_config.auto_sync) {
+        if (load_federation_config(&fed_config) == 0 && fed_config.sync_enabled) {
             /* Load menu */
             FILE *fp = fopen(MENU_PATH, "r");
             if (fp) {

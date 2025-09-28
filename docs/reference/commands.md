@@ -414,12 +414,12 @@ till federate set <key> <value>
 ```
 
 Available settings:
-- `auto_sync` - Enable/disable automatic sync (true/false)
+- `sync_enabled` - Enable/disable sync functionality (true/false)
 
 Examples:
 ```bash
-till federate set auto_sync true
-till federate set auto_sync false
+till federate set sync_enabled true
+till federate set sync_enabled false
 ```
 
 ### till federate menu

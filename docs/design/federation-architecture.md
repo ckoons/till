@@ -61,7 +61,7 @@ This ID is:
   "github_token_encrypted": "encrypted_token_here",
   "trust_level": "named",
   "last_sync": 1757943273,
-  "auto_sync": true,
+  "sync_enabled": true,
   "last_menu_date": "2025-01-15"
 }
 ```

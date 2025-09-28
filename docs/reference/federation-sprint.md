@@ -27,7 +27,7 @@ typedef struct {
     char github_token[256];  // encrypted
     char trust_level[32];    // anonymous|named|trusted
     time_t last_sync;
-    int auto_sync;
+    int sync_enabled;
 } federation_config_t;
 
 typedef struct {

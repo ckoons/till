@@ -180,7 +180,7 @@ if [ -f ~/.till/federation.json ]; then
 import json
 with open('$HOME/.till/federation.json') as f:
     config = json.load(f)
-    required = ['site_id', 'trust_level', 'auto_sync']
+    required = ['site_id', 'trust_level', 'sync_enabled']
     missing = [k for k in required if k not in config]
     if missing:
         print('✗ Missing fields:', missing)
