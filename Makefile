@@ -244,30 +244,18 @@ install: $(TARGET) check-prereqs setup-github
 	fi
 	@# Create .till directory and initial hosts file
 	@echo "Initializing Till configuration..."
-	@mkdir -p .till
-	@if [ ! -f .till/hosts-local.json ]; then \
+	@mkdir -p .till/config
+	@if [ ! -f .till/config/hosts-local.json ]; then \
 		echo "Creating initial hosts-local.json..."; \
 		HOSTNAME=$$(hostname); \
 		TILL_PATH=$$(pwd); \
-		echo "{\"hosts\":{\"local\":{\"user\":\"$$USER\",\"host\":\"localhost\",\"port\":22,\"status\":\"ready\",\"hostname\":\"$$HOSTNAME\",\"till_configured\":\"yes\",\"till_path\":\"$$TILL_PATH\"}},\"updated\":\"$$(date +%s)\"}" | python3 -m json.tool > .till/hosts-local.json 2>/dev/null || \
-		echo '{"hosts":{"local":{"user":"'$$USER'","host":"localhost","port":22,"status":"ready","hostname":"'$$HOSTNAME'","till_configured":"yes","till_path":"'$$TILL_PATH'"}},"updated":"'$$(date +%s)'"}' > .till/hosts-local.json; \
+		echo "{\"hosts\":{\"local\":{\"user\":\"$$USER\",\"host\":\"localhost\",\"port\":22,\"status\":\"ready\",\"hostname\":\"$$HOSTNAME\",\"till_configured\":\"yes\",\"till_path\":\"$$TILL_PATH\"}},\"updated\":\"$$(date +%s)\"}" | python3 -m json.tool > .till/config/hosts-local.json 2>/dev/null || \
+		echo '{"hosts":{"local":{"user":"'$$USER'","host":"localhost","port":22,"status":"ready","hostname":"'$$HOSTNAME'","till_configured":"yes","till_path":"'$$TILL_PATH'"}},"updated":"'$$(date +%s)'"}' > .till/config/hosts-local.json; \
 		echo "Initial hosts file created"; \
 	else \
 		echo "Using existing hosts-local.json"; \
 	fi
-	@# Create default federation.json in global ~/.till if it doesn't exist
-	@mkdir -p $(HOME)/.till
-	@if [ ! -f $(HOME)/.till/federation.json ]; then \
-		echo "Creating default federation.json..."; \
-		HOSTNAME=$$(hostname); \
-		HEX_TIME=$$(printf "%lx" $$(date +%s)); \
-		SITE_ID="$$HOSTNAME.$$HEX_TIME.till"; \
-		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' | python3 -m json.tool > $(HOME)/.till/federation.json 2>/dev/null || \
-		echo '{"federation_mode":"anonymous","site_id":"'$$SITE_ID'","joined_date":null,"last_sync":null,"sync_enabled":true,"menu_version":null,"menu_last_processed":null}' > $(HOME)/.till/federation.json; \
-		echo "Created federation config with site_id: $$SITE_ID"; \
-	else \
-		echo "Using existing federation.json"; \
-	fi
+	@# Federation config is now managed by Till itself, not created during install
 	@echo ""
 	@echo "Checking dependencies..."
 	@if command -v git >/dev/null 2>&1; then \
