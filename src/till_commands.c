@@ -385,7 +385,7 @@ int cmd_sync(int argc, char *argv[]) {
 
 /* Command: watch - Configure automatic sync */
 int cmd_watch(int argc, char *argv[]) {
-    return till_watch_configure(argc - 1, argv + 1);
+    return till_watch_configure(argc, argv);
 }
 
 /* Command: install - Install Tekton or components */

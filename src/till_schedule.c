@@ -123,13 +123,13 @@ int till_watch_configure(int argc, char *argv[]) {
         till_error("Failed to load schedule configuration\n");
         return -1;
     }
-    
+
     cJSON *sync = cJSON_GetObjectItem(schedule, "sync");
     if (!sync) {
         sync = cJSON_CreateObject();
         cJSON_AddItemToObject(schedule, "sync", sync);
     }
-    
+
     /* Parse arguments */
     if (argc == 0) {
         /* No arguments - show status */
@@ -144,11 +144,39 @@ int till_watch_configure(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i], "--enable") == 0) {
             cJSON_ReplaceItemInObject(sync, "enabled", cJSON_CreateBool(1));
-            printf("Automatic sync enabled\n");
+
+            /* Ensure interval is set to 24 hours if not already configured */
+            cJSON *interval = cJSON_GetObjectItem(sync, "interval_hours");
+            if (!interval || cJSON_GetNumberValue(interval) <= 0) {
+                /* Use AddItemToObject if it doesn't exist, ReplaceItemInObject if it does */
+                if (!interval) {
+                    cJSON_AddItemToObject(sync, "interval_hours", cJSON_CreateNumber(24));
+                } else {
+                    cJSON_ReplaceItemInObject(sync, "interval_hours", cJSON_CreateNumber(24));
+                }
+                printf("Automatic sync enabled (24 hour interval)\n");
+            } else {
+                int hours = (int)cJSON_GetNumberValue(interval);
+                printf("Automatic sync enabled (%d hour interval)\n", hours);
+            }
+
+            /* Save and then show status */
+            if (save_schedule(schedule) != 0) {
+                till_error("Failed to save schedule after modification\n");
+            }
+            cJSON_Delete(schedule);
+            return till_watch_status();
         }
         else if (strcmp(argv[i], "--disable") == 0) {
             cJSON_ReplaceItemInObject(sync, "enabled", cJSON_CreateBool(0));
             printf("Automatic sync disabled\n");
+
+            /* Save and then show status */
+            if (save_schedule(schedule) != 0) {
+                till_error("Failed to save schedule after modification\n");
+            }
+            cJSON_Delete(schedule);
+            return till_watch_status();
         }
         else if (strcmp(argv[i], "--daily-at") == 0 && i + 1 < argc) {
             const char *time_str = argv[++i];
