@@ -146,23 +146,6 @@ clean:
 	@echo "Clean complete"
 
 # Install - smart install that tries system-wide first, falls back to user
-# Generate man page from help text
-man: $(TARGET)
-	@echo "Generating man page..."
-	@echo ".TH TILL 1 \"$$(date +'%B %Y')\" \"Till 1.0.0\" \"Till Manual\"" > till.1
-	@echo ".SH NAME" >> till.1
-	@echo "till \\- Tekton Installation Lifecycle Manager" >> till.1
-	@echo ".SH SYNOPSIS" >> till.1
-	@echo ".B till" >> till.1
-	@echo "[\\fICOMMAND\\fR] [\\fIOPTIONS\\fR]" >> till.1
-	@echo ".SH DESCRIPTION" >> till.1
-	@echo "Till manages Tekton installations across local and remote systems." >> till.1
-	@echo ".SH FILES" >> till.1
-	@echo ".TP" >> till.1
-	@echo ".I ~/.till/" >> till.1
-	@echo "Till configuration directory" >> till.1
-	@echo "Man page generated"
-
 # Check prerequisites and attempt auto-install if missing
 .PHONY: check-prereqs
 check-prereqs:
@@ -240,7 +223,7 @@ setup-github:
 	fi
 	@true  # Always succeed
 
-install: $(TARGET) man check-prereqs setup-github
+install: $(TARGET) check-prereqs setup-github
 	@if [ -w /usr/local/bin ]; then \
 		echo "Installing till to /usr/local/bin..."; \
 		cp $(TARGET) /usr/local/bin/; \
@@ -369,4 +352,4 @@ help:
 	@echo "  info        - Show build configuration"
 	@echo "  help        - Show this help message"
 
-.PHONY: all clean install uninstall test debug info help man
+.PHONY: all clean install uninstall test debug info help
